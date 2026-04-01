@@ -5,7 +5,7 @@ import NavBar from '../components/NavBar';
 import StatusBadge from '../components/StatusBadge';
 import { useLang } from '../i18n';
 
-type Tab = 'stats' | 'responders' | 'licenses' | 'requests' | 'settlements' | 'gov' | 'sponsors';
+type Tab = 'stats' | 'responders' | 'licenses' | 'safety' | 'requests' | 'settlements' | 'gov' | 'sponsors';
 
 const LICENSE_LABELS: Record<string, string> = {
   nurse: '간호사', doctor: '의사', emt: '응급구조사',
@@ -23,6 +23,8 @@ export default function AdminDashboard() {
   const [settlements, setSettlements] = useState<any[]>([]);
   const [govContracts, setGovContracts] = useState<any[]>([]);
   const [sponsors, setSponsors] = useState<any[]>([]);
+  const [complaints, setComplaints] = useState<any[]>([]);
+  const [warnedResponders, setWarnedResponders] = useState<any[]>([]);
   const [impact, setImpact] = useState<any>(null);
 
   const load = () => {
@@ -34,6 +36,8 @@ export default function AdminDashboard() {
     api.get('/api/admin/settlements/pending', token).then((d: any) => setSettlements(d.settlements || []));
     api.get('/api/admin/gov-contracts', token).then((d: any) => setGovContracts(d.contracts || []));
     api.get('/api/admin/sponsors', token).then((d: any) => setSponsors(d.sponsors || []));
+    api.get('/api/admin/complaints?status=pending', token).then((d: any) => setComplaints(d.complaints || []));
+    api.get('/api/admin/responders/warned', token).then((d: any) => setWarnedResponders(d.responders || []));
     api.get('/api/public/impact').then(setImpact);
   };
   useEffect(() => { load(); }, [token]);
@@ -41,6 +45,8 @@ export default function AdminDashboard() {
   const approve = async (id: string) => { await api.patch(`/api/admin/responders/${id}/approve`, {}, token!); load(); };
   const suspendR = async (id: string) => { await api.patch(`/api/admin/responders/${id}/suspend`, {}, token!); load(); };
   const pay = async (id: string) => { await api.patch(`/api/admin/settlements/${id}/pay`, {}, token!); load(); };
+  const resolveComplaint = async (id: string, action: string) => { await api.patch(`/api/admin/complaints/${id}/resolve`, { action }, token!); load(); };
+  const reinstateResponder = async (id: string) => { await api.patch(`/api/admin/responders/${id}/reinstate`, {}, token!); load(); };
   const verifyLicense = async (id: string) => { await api.patch(`/api/admin/licenses/${id}/verify`, {}, token!); load(); };
   const rejectLicense = async (id: string) => { await api.patch(`/api/admin/licenses/${id}/reject`, {}, token!); load(); };
 
@@ -48,6 +54,7 @@ export default function AdminDashboard() {
     { key: 'stats', label: t('tabStats') },
     { key: 'responders', label: t('tabResponders') },
     { key: 'licenses', label: '면허검증' },
+    { key: 'safety', label: '안전관리' },
     { key: 'requests', label: t('tabRequests') },
     { key: 'settlements', label: t('tabSettlements') },
     { key: 'gov', label: '지자체' },
@@ -76,8 +83,9 @@ export default function AdminDashboard() {
               { label: t('pendingResponders'), value: stats.pendingResponders },
               { label: t('requestsToday'), value: stats.requestsToday },
               { label: t('completedToday'), value: stats.completedToday },
-              { label: '지자체 계약', value: govContracts.length },
-              { label: '스폰서', value: sponsors.length },
+              { label: '경고 출동자', value: stats.warnedResponders || 0 },
+              { label: '정지 출동자', value: stats.suspendedResponders || 0 },
+              { label: '민원 대기', value: stats.pendingComplaints || 0 },
             ].map((s, i) => (
               <div key={i} className="bg-surface-card rounded-card p-5 text-center">
                 <div className="text-3xl font-display font-bold text-primary">{s.value}</div>
@@ -133,6 +141,47 @@ export default function AdminDashboard() {
                   <button onClick={() => verifyLicense(l.id)} className="flex-1 py-2 bg-trust-green text-white rounded-xl text-sm font-bold">검증 승인</button>
                   <button onClick={() => rejectLicense(l.id)} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-sm font-bold">거부</button>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Safety Management */}
+        {tab === 'safety' && (
+          <div className="flex flex-col gap-4">
+            <h3 className="font-display font-bold">민원 대기 ({complaints.length}건)</h3>
+            {complaints.length === 0 ? <div className="bg-surface-low rounded-card p-6 text-center text-on-surface-variant text-sm">대기 중인 민원이 없습니다</div>
+            : complaints.map((co: any) => (
+              <div key={co.id} className="bg-surface-card rounded-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-sm">{co.reporter_name} → {co.target_name}</span>
+                  <span className="text-xs bg-error-container text-error px-2 py-0.5 rounded-full">{co.reason}</span>
+                </div>
+                {co.detail && <p className="text-xs text-on-surface-variant mb-3">{co.detail}</p>}
+                <div className="flex gap-2">
+                  <button onClick={() => resolveComplaint(co.id, 'dismissed')} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-xs font-bold">기각</button>
+                  <button onClick={() => resolveComplaint(co.id, 'warning')} className="flex-1 py-2 bg-orange-grade-bg text-orange-grade rounded-xl text-xs font-bold">경고</button>
+                  <button onClick={() => resolveComplaint(co.id, 'suspended')} className="flex-1 py-2 bg-error-container text-error rounded-xl text-xs font-bold">정지</button>
+                </div>
+              </div>
+            ))}
+
+            <h3 className="font-display font-bold mt-4">경고/정지 출동자 ({warnedResponders.length}명)</h3>
+            {warnedResponders.length === 0 ? <div className="bg-surface-low rounded-card p-6 text-center text-on-surface-variant text-sm">경고/정지된 출동자가 없습니다</div>
+            : warnedResponders.map((r: any) => (
+              <div key={r.user_id} className="bg-surface-card rounded-card p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold">{r.name}</span>
+                  <div className="flex items-center gap-2">
+                    {r.warning_count > 0 && <span className="text-xs bg-orange-grade-bg text-orange-grade px-2 py-0.5 rounded-full">경고 {r.warning_count}회</span>}
+                    {r.status === 'suspended' && <span className="text-xs bg-error-container text-error px-2 py-0.5 rounded-full">정지</span>}
+                  </div>
+                </div>
+                <p className="text-xs text-on-surface-variant">평점 {r.rating || '-'} / 완료 {r.total_done}건</p>
+                {r.suspended_reason && <p className="text-xs text-error mt-1">사유: {r.suspended_reason}</p>}
+                {r.status === 'suspended' && (
+                  <button onClick={() => reinstateResponder(r.user_id)} className="mt-2 w-full py-2 bg-trust-green text-white rounded-xl text-xs font-bold">정지 해제</button>
+                )}
               </div>
             ))}
           </div>

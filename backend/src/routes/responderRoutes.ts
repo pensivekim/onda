@@ -6,20 +6,44 @@ import { getRegion } from "../utils/regions";
 
 const app = new Hono<{ Bindings: Env }>();
 
-// POST /api/responders/register — 출동자 가입
+// POST /api/responders/register — 출동자 가입 (검증 강화)
 app.post("/api/responders/register", requireAuth(), async (c) => {
   await ensureAllTables(c.env.DB);
   const user = getUser(c);
-  const body = await c.req.json<{ bio?: string; phone?: string; grade?: string }>();
+  const body = await c.req.json<{
+    bio?: string; phone?: string; grade?: string;
+    criminalCheckAgreed?: boolean; sexOffenderCheckAgreed?: boolean;
+    serviceOathAgreed?: boolean;
+  }>();
+
+  // Mandatory agreements
+  if (!body.criminalCheckAgreed || !body.sexOffenderCheckAgreed || !body.serviceOathAgreed) {
+    return c.json({ error: "All safety agreements are required" }, 400);
+  }
+
   const grade = (body.grade === 'orange' || body.grade === 'red') ? body.grade : 'green';
 
   // Update user role
   await c.env.DB.prepare("UPDATE onda_users SET role = 'responder', phone = ? WHERE id = ?")
     .bind(body.phone || "", user.id).run();
 
-  // Create responder profile
+  // Migration: add safety columns
+  const migrations = [
+    "ALTER TABLE onda_responders ADD COLUMN criminal_check_agreed INTEGER DEFAULT 0",
+    "ALTER TABLE onda_responders ADD COLUMN sex_offender_check_agreed INTEGER DEFAULT 0",
+    "ALTER TABLE onda_responders ADD COLUMN service_oath_agreed INTEGER DEFAULT 0",
+    "ALTER TABLE onda_responders ADD COLUMN interview_scheduled_at TEXT",
+    "ALTER TABLE onda_responders ADD COLUMN interview_status TEXT DEFAULT 'not_scheduled'",
+    "ALTER TABLE onda_responders ADD COLUMN warning_count INTEGER DEFAULT 0",
+    "ALTER TABLE onda_responders ADD COLUMN suspended_reason TEXT",
+  ];
+  for (const sql of migrations) { try { await c.env.DB.prepare(sql).run(); } catch {} }
+
+  // Create/update responder profile
   await c.env.DB.prepare(
-    "INSERT INTO onda_responders (user_id, bio, grade) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = ?, grade = ?"
+    `INSERT INTO onda_responders (user_id, bio, grade, criminal_check_agreed, sex_offender_check_agreed, service_oath_agreed)
+     VALUES (?, ?, ?, 1, 1, 1)
+     ON CONFLICT(user_id) DO UPDATE SET bio = ?, grade = ?, criminal_check_agreed = 1, sex_offender_check_agreed = 1, service_oath_agreed = 1`
   ).bind(user.id, body.bio || "", grade, body.bio || "", grade).run();
 
   return c.json({ ok: true, status: "pending", grade });
@@ -272,14 +296,23 @@ app.post("/api/reviews", requireAuth(), async (c) => {
     "INSERT INTO onda_reviews (id, match_id, reviewer_id, target_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)"
   ).bind(reviewId, body.matchId, user.id, targetId, body.rating, body.comment || "").run();
 
-  // Update responder average rating (if target is responder)
+  // Update responder average rating + auto-warning system
   if (isRequester) {
     const avg = await c.env.DB.prepare(
-      "SELECT AVG(rating) as avg_rating FROM onda_reviews WHERE target_id = ?"
-    ).bind(targetId).first<{ avg_rating: number }>();
+      "SELECT AVG(rating) as avg_rating, COUNT(*) as cnt FROM onda_reviews WHERE target_id = ?"
+    ).bind(targetId).first<{ avg_rating: number; cnt: number }>();
     if (avg) {
       await c.env.DB.prepare("UPDATE onda_responders SET rating = ? WHERE user_id = ?")
         .bind(Math.round(avg.avg_rating * 10) / 10, targetId).run();
+
+      // Auto-warning: 3 or more reviews with avg <= 3.0
+      if (avg.cnt >= 3 && avg.avg_rating <= 3.0) {
+        try { await c.env.DB.prepare("ALTER TABLE onda_responders ADD COLUMN warning_count INTEGER DEFAULT 0").run(); } catch {}
+        await c.env.DB.prepare("UPDATE onda_responders SET warning_count = warning_count + 1 WHERE user_id = ?").bind(targetId).run();
+        await c.env.DB.prepare(
+          "INSERT INTO onda_notifications (user_id, type, title, body) VALUES (?, 'warning', ?, ?)"
+        ).bind(targetId, "Low Rating Warning", "Your average rating is below 3.0. Please improve your service quality.").run();
+      }
     }
   }
 
@@ -337,6 +370,83 @@ app.get("/api/chat/:matchId", requireAuth(), async (c) => {
   ).bind(matchId, parseInt(after)).all();
 
   return c.json({ messages: result.results });
+});
+
+// ===== 민원 접수 =====
+app.post("/api/complaints", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const body = await c.req.json<{ requestId?: string; matchId?: string; targetId: string; reason: string; detail?: string }>();
+  if (!body.targetId || !body.reason) return c.json({ error: "targetId and reason required" }, 400);
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    "INSERT INTO onda_complaints (id, request_id, match_id, reporter_id, target_id, reason, detail) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, body.requestId || "", body.matchId || "", user.id, body.targetId, body.reason, body.detail || "").run();
+
+  // Auto-suspend: 2+ pending/resolved complaints → suspend
+  const complaintCount = await c.env.DB.prepare(
+    "SELECT COUNT(*) as cnt FROM onda_complaints WHERE target_id = ? AND status IN ('pending','resolved')"
+  ).bind(body.targetId).first<{ cnt: number }>();
+
+  if (complaintCount && complaintCount.cnt >= 2) {
+    try { await c.env.DB.prepare("ALTER TABLE onda_responders ADD COLUMN suspended_reason TEXT").run(); } catch {}
+    await c.env.DB.prepare(
+      "UPDATE onda_responders SET status = 'suspended', available = 0, suspended_reason = 'auto_complaint_2+' WHERE user_id = ?"
+    ).bind(body.targetId).run();
+    await c.env.DB.prepare(
+      "INSERT INTO onda_notifications (user_id, type, title, body) VALUES (?, 'suspended', ?, ?)"
+    ).bind(body.targetId, "Account Suspended", "Your account has been suspended due to multiple complaints. Admin will review.").run();
+    // Notify admin
+    await c.env.DB.prepare(
+      "INSERT INTO onda_admin_logs (admin_id, action, target_type, target_id, memo) VALUES ('system', 'auto_suspend', 'responder', ?, ?)"
+    ).bind(body.targetId, `complaint_count=${complaintCount.cnt}`).run();
+  }
+
+  return c.json({ ok: true, complaintId: id });
+});
+
+// GET /api/complaints/my — 내가 접수한 민원
+app.get("/api/complaints/my", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const result = await c.env.DB.prepare(
+    "SELECT * FROM onda_complaints WHERE reporter_id = ? ORDER BY created_at DESC LIMIT 20"
+  ).bind(user.id).all();
+  return c.json({ complaints: result.results });
+});
+
+// ===== 출동 중 실시간 위치 공유 (요청자가 출동자 위치 조회) =====
+app.get("/api/dispatch/:requestId/responder-location", requireAuth(), async (c) => {
+  const requestId = c.req.param("requestId");
+  // Find active match
+  const match = await c.env.DB.prepare(
+    "SELECT responder_id FROM onda_matches WHERE request_id = ? AND status IN ('accepted','moving','arrived','in_progress') LIMIT 1"
+  ).bind(requestId).first<{ responder_id: string }>();
+  if (!match) return c.json({ error: "No active match" }, 404);
+
+  // Get responder location from KV
+  const locStr = await c.env.LOCATION_KV.get(`loc:${match.responder_id}`);
+  if (!locStr) return c.json({ lat: null, lng: null, available: false });
+  const [lat, lng] = locStr.split(",").map(Number);
+  return c.json({ lat, lng, available: true, responderId: match.responder_id });
+});
+
+// ===== 화상 인터뷰 일정 예약 =====
+app.post("/api/responders/schedule-interview", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const body = await c.req.json<{ scheduledAt: string }>();
+  if (!body.scheduledAt) return c.json({ error: "scheduledAt required" }, 400);
+
+  try { await c.env.DB.prepare("ALTER TABLE onda_responders ADD COLUMN interview_scheduled_at TEXT").run(); } catch {}
+  try { await c.env.DB.prepare("ALTER TABLE onda_responders ADD COLUMN interview_status TEXT DEFAULT 'not_scheduled'").run(); } catch {}
+
+  await c.env.DB.prepare(
+    "UPDATE onda_responders SET interview_scheduled_at = ?, interview_status = 'scheduled' WHERE user_id = ?"
+  ).bind(body.scheduledAt, user.id).run();
+
+  return c.json({ ok: true, scheduledAt: body.scheduledAt });
 });
 
 export { app as responderRoutes };

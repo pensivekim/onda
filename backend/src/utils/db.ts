@@ -102,6 +102,20 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       content TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
+    // Complaints (민원)
+    db.prepare(`CREATE TABLE IF NOT EXISTS onda_complaints (
+      id TEXT PRIMARY KEY,
+      request_id TEXT,
+      match_id TEXT,
+      reporter_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      detail TEXT,
+      status TEXT DEFAULT 'pending',
+      resolved_by TEXT,
+      resolved_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
     // Wallet (예치금)
     db.prepare(`CREATE TABLE IF NOT EXISTS onda_wallets (
       user_id TEXT PRIMARY KEY,
@@ -200,6 +214,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
     "CREATE INDEX IF NOT EXISTS idx_responders_available ON onda_responders(status, available)",
     "CREATE INDEX IF NOT EXISTS idx_reviews_match ON onda_reviews(match_id)",
     "CREATE INDEX IF NOT EXISTS idx_messages_match ON onda_messages(match_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_complaints_target ON onda_complaints(target_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_wallet_txn_user ON onda_wallet_transactions(user_id, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_licenses_responder ON onda_licenses(responder_id)",
     "CREATE INDEX IF NOT EXISTS idx_gov_beneficiaries_contract ON onda_gov_beneficiaries(contract_id)",

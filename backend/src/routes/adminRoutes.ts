@@ -84,13 +84,104 @@ app.get("/api/admin/stats", requireAdmin(), async (c) => {
     c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_matches WHERE status = 'completed' AND completed_at >= ?").bind(today).first<{ cnt: number }>(),
   ]);
 
+  // Safety stats
+  const [warned, suspended, pendingComplaints, interviewPending] = await Promise.all([
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_responders WHERE warning_count > 0").first<{ cnt: number }>().catch(() => ({ cnt: 0 })),
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_responders WHERE status = 'suspended'").first<{ cnt: number }>().catch(() => ({ cnt: 0 })),
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_complaints WHERE status = 'pending'").first<{ cnt: number }>().catch(() => ({ cnt: 0 })),
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_responders WHERE interview_status = 'scheduled'").first<{ cnt: number }>().catch(() => ({ cnt: 0 })),
+  ]);
+
   return c.json({
     totalUsers: users?.cnt || 0,
     approvedResponders: responders?.cnt || 0,
     pendingResponders: pendingResp?.cnt || 0,
     requestsToday: requestsToday?.cnt || 0,
     completedToday: matchesToday?.cnt || 0,
+    warnedResponders: (warned as any)?.cnt || 0,
+    suspendedResponders: (suspended as any)?.cnt || 0,
+    pendingComplaints: (pendingComplaints as any)?.cnt || 0,
+    interviewPending: (interviewPending as any)?.cnt || 0,
   });
+});
+
+// ===== Safety: Complaints Management =====
+
+// GET /api/admin/complaints — 민원 목록
+app.get("/api/admin/complaints", requireAdmin(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const status = c.req.query("status") || "pending";
+  const result = await c.env.DB.prepare(
+    `SELECT co.*, u1.name as reporter_name, u2.name as target_name
+     FROM onda_complaints co
+     LEFT JOIN onda_users u1 ON u1.id = co.reporter_id
+     LEFT JOIN onda_users u2 ON u2.id = co.target_id
+     WHERE co.status = ? ORDER BY co.created_at DESC LIMIT 50`
+  ).bind(status).all();
+  return c.json({ complaints: result.results });
+});
+
+// PATCH /api/admin/complaints/:id/resolve — 민원 처리
+app.patch("/api/admin/complaints/:id/resolve", requireAdmin(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const id = c.req.param("id");
+  const body = await c.req.json<{ action: string; memo?: string }>();
+  // action: 'dismissed' (기각), 'warning' (경고), 'suspended' (정지)
+  const now = new Date().toISOString();
+
+  await c.env.DB.prepare("UPDATE onda_complaints SET status = 'resolved', resolved_at = ? WHERE id = ?").bind(now, id).run();
+
+  const complaint = await c.env.DB.prepare("SELECT target_id FROM onda_complaints WHERE id = ?").bind(id).first<{ target_id: string }>();
+  if (complaint && body.action === 'warning') {
+    await c.env.DB.prepare("UPDATE onda_responders SET warning_count = warning_count + 1 WHERE user_id = ?").bind(complaint.target_id).run();
+    await c.env.DB.prepare("INSERT INTO onda_notifications (user_id, type, title, body) VALUES (?, 'warning', ?, ?)")
+      .bind(complaint.target_id, "Warning Issued", body.memo || "You have received a warning from admin.").run();
+  }
+  if (complaint && body.action === 'suspended') {
+    await c.env.DB.prepare("UPDATE onda_responders SET status = 'suspended', available = 0, suspended_reason = ? WHERE user_id = ?")
+      .bind(body.memo || "admin_action", complaint.target_id).run();
+  }
+
+  return c.json({ ok: true });
+});
+
+// GET /api/admin/responders/warned — 경고/정지 출동자 목록
+app.get("/api/admin/responders/warned", requireAdmin(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const result = await c.env.DB.prepare(
+    `SELECT r.*, u.name, u.phone FROM onda_responders r
+     JOIN onda_users u ON u.id = r.user_id
+     WHERE r.warning_count > 0 OR r.status = 'suspended'
+     ORDER BY r.warning_count DESC`
+  ).bind().all();
+  return c.json({ responders: result.results });
+});
+
+// GET /api/admin/responders/verification-status — 검증 단계별 현황
+app.get("/api/admin/responders/verification-status", requireAdmin(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const result = await c.env.DB.prepare(
+    `SELECT r.user_id, u.name, u.phone, r.grade, r.status, r.criminal_check_agreed,
+       r.sex_offender_check_agreed, r.service_oath_agreed, r.interview_status, r.interview_scheduled_at,
+       r.warning_count, r.rating, r.total_done, r.created_at
+     FROM onda_responders r JOIN onda_users u ON u.id = r.user_id
+     ORDER BY r.created_at DESC`
+  ).bind().all();
+  return c.json({ responders: result.results });
+});
+
+// PATCH /api/admin/responders/:id/interview-complete — 인터뷰 완료 처리
+app.patch("/api/admin/responders/:id/interview-complete", requireAdmin(), async (c) => {
+  const id = c.req.param("id");
+  await c.env.DB.prepare("UPDATE onda_responders SET interview_status = 'completed' WHERE user_id = ?").bind(id).run();
+  return c.json({ ok: true });
+});
+
+// PATCH /api/admin/responders/:id/reinstate — 정지 해제
+app.patch("/api/admin/responders/:id/reinstate", requireAdmin(), async (c) => {
+  const id = c.req.param("id");
+  await c.env.DB.prepare("UPDATE onda_responders SET status = 'approved', suspended_reason = NULL, warning_count = 0 WHERE user_id = ?").bind(id).run();
+  return c.json({ ok: true });
 });
 
 // ===== Phase 3: 면허 검증 =====

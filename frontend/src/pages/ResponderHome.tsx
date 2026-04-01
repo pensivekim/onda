@@ -10,7 +10,7 @@ export default function ResponderHome() {
   const { t } = useLang();
   const [responder, setResponder] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
-  const [regForm, setRegForm] = useState({ bio: '', phone: '', grade: 'green' });
+  const [regForm, setRegForm] = useState({ bio: '', phone: '', grade: 'green', criminalCheck: false, sexOffenderCheck: false, serviceOath: false });
   const [certFile, setCertFile] = useState<File | null>(null);
   const [registering, setRegistering] = useState(false);
   const watchRef = useRef<number | null>(null);
@@ -41,7 +41,10 @@ export default function ResponderHome() {
 
   const register = async () => {
     setRegistering(true);
-    await api.post('/api/responders/register', { bio: regForm.bio, phone: regForm.phone, grade: regForm.grade }, token!);
+    await api.post('/api/responders/register', {
+      bio: regForm.bio, phone: regForm.phone, grade: regForm.grade,
+      criminalCheckAgreed: regForm.criminalCheck, sexOffenderCheckAgreed: regForm.sexOffenderCheck, serviceOathAgreed: regForm.serviceOath,
+    }, token!);
     // Upload cert photo if selected
     if (certFile) {
       const fd = new FormData();
@@ -89,7 +92,25 @@ export default function ResponderHome() {
             <input type="file" accept="image/*" onChange={e => setCertFile(e.target.files?.[0] || null)}
               className="w-full text-sm text-on-surface-variant file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-surface-low file:text-on-surface file:font-semibold file:cursor-pointer"/>
           </div>
-          <button onClick={register} disabled={registering || !regForm.phone}
+          <div className="bg-surface-low rounded-xl p-4 flex flex-col gap-3">
+            <p className="text-sm font-semibold text-on-surface">안전 검증 동의 (필수)</p>
+            <label className="flex items-start gap-2 text-xs text-on-surface-variant cursor-pointer">
+              <input type="checkbox" checked={regForm.criminalCheck} onChange={e => setRegForm({...regForm, criminalCheck: e.target.checked})}
+                className="mt-0.5 w-4 h-4 accent-primary"/>
+              범죄경력 조회에 동의합니다
+            </label>
+            <label className="flex items-start gap-2 text-xs text-on-surface-variant cursor-pointer">
+              <input type="checkbox" checked={regForm.sexOffenderCheck} onChange={e => setRegForm({...regForm, sexOffenderCheck: e.target.checked})}
+                className="mt-0.5 w-4 h-4 accent-primary"/>
+              성범죄 경력 조회에 동의합니다
+            </label>
+            <label className="flex items-start gap-2 text-xs text-on-surface-variant cursor-pointer">
+              <input type="checkbox" checked={regForm.serviceOath} onChange={e => setRegForm({...regForm, serviceOath: e.target.checked})}
+                className="mt-0.5 w-4 h-4 accent-primary"/>
+              아동·노인 돌봄 서비스 서약서에 동의합니다
+            </label>
+          </div>
+          <button onClick={register} disabled={registering || !regForm.phone || !regForm.criminalCheck || !regForm.sexOffenderCheck || !regForm.serviceOath}
             className="w-full py-3.5 rounded-xl bg-primary text-on-primary font-display font-bold disabled:opacity-40">
             {registering ? '등록 중...' : t('registerBtn')}
           </button>
