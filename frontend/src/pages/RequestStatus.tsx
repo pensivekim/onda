@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api';
 import NavBar from '../components/NavBar';
 import StatusBadge from '../components/StatusBadge';
+import ChatPanel from '../components/ChatPanel';
+import ReviewPanel from '../components/ReviewPanel';
 import { useLang } from '../i18n';
 
 const STEPS = ['pending', 'accepted', 'moving', 'arrived', 'in_progress', 'completed'];
@@ -54,7 +56,9 @@ export default function RequestStatus() {
               <div>
                 <div className="font-semibold">{match.responder_name}</div>
                 <div className="text-xs text-on-surface-variant flex items-center gap-2">
-                  <span className="text-trust-green">🟢 {match.grade || 'green'}</span>
+                  <span className={match.grade === 'orange' ? 'text-orange-grade' : match.grade === 'red' ? 'text-error' : 'text-trust-green'}>
+                    {match.grade === 'orange' ? '🟠' : match.grade === 'red' ? '🔴' : '🟢'} {match.grade || 'green'}
+                  </span>
                   {match.total_done > 0 && <span>{match.total_done}{t('done')}</span>}
                 </div>
               </div>
@@ -66,6 +70,16 @@ export default function RequestStatus() {
             <div className="text-3xl mb-2">🔍</div>
             <p className="text-on-surface-variant text-sm">{t('searching')}</p>
           </div>
+        )}
+
+        {/* Chat — active matches only */}
+        {match && ['accepted','moving','arrived','in_progress'].includes(match.status) && (
+          <div className="mt-4"><ChatPanel matchId={match.id} /></div>
+        )}
+
+        {/* Review — completed matches */}
+        {match?.status === 'completed' && (
+          <div className="mt-4"><ReviewPanel matchId={match.id} /></div>
         )}
       </div>
     </div>

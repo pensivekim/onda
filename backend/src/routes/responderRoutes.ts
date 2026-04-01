@@ -9,7 +9,8 @@ const app = new Hono<{ Bindings: Env }>();
 app.post("/api/responders/register", requireAuth(), async (c) => {
   await ensureAllTables(c.env.DB);
   const user = getUser(c);
-  const body = await c.req.json<{ bio?: string; phone?: string }>();
+  const body = await c.req.json<{ bio?: string; phone?: string; grade?: string }>();
+  const grade = (body.grade === 'orange' || body.grade === 'red') ? body.grade : 'green';
 
   // Update user role
   await c.env.DB.prepare("UPDATE onda_users SET role = 'responder', phone = ? WHERE id = ?")
@@ -17,8 +18,8 @@ app.post("/api/responders/register", requireAuth(), async (c) => {
 
   // Create responder profile
   await c.env.DB.prepare(
-    "INSERT INTO onda_responders (user_id, bio) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = ?"
-  ).bind(user.id, body.bio || "", body.bio || "").run();
+    "INSERT INTO onda_responders (user_id, bio, grade) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = ?, grade = ?"
+  ).bind(user.id, body.bio || "", grade, body.bio || "", grade).run();
 
   return c.json({ ok: true, status: "pending" });
 });
@@ -120,7 +121,10 @@ app.patch("/api/matches/:id/status", requireAuth(), async (c) => {
     const startedAt = match.started_at as string;
     if (startedAt) {
       const mins = Math.max(1, Math.round((Date.now() - new Date(startedAt).getTime()) / 60000));
-      const amount = Math.round((mins / 60) * 25000); // 그린 시급 25,000원
+      // 등급별 시급: 그린 25,000 / 오렌지 40,000 / 레드 80,000
+      const responder = await c.env.DB.prepare("SELECT grade FROM onda_responders WHERE user_id = ?").bind(user.id).first<{grade:string}>();
+      const hourlyRate = responder?.grade === 'red' ? 80000 : responder?.grade === 'orange' ? 40000 : 25000;
+      const amount = Math.round((mins / 60) * hourlyRate);
       updates.push(`duration_min = ${mins}`, `amount = ${amount}`);
 
       // Create settlement
@@ -147,6 +151,106 @@ app.get("/api/settlements/my", requireAuth(), async (c) => {
     "SELECT * FROM onda_settlements WHERE responder_id = ? ORDER BY created_at DESC LIMIT 30"
   ).bind(user.id).all();
   return c.json({ settlements: result.results });
+});
+
+// ===== 리뷰/평점 =====
+
+// POST /api/reviews — 리뷰 작성 (양방향: 요청자↔출동자)
+app.post("/api/reviews", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const body = await c.req.json<{ matchId: string; rating: number; comment?: string }>();
+  if (!body.matchId || !body.rating || body.rating < 1 || body.rating > 5) {
+    return c.json({ error: "matchId and rating (1-5) required" }, 400);
+  }
+
+  // Find match and determine target
+  const match = await c.env.DB.prepare(
+    "SELECT m.*, r.requester_id FROM onda_matches m JOIN onda_requests r ON r.id = m.request_id WHERE m.id = ?"
+  ).bind(body.matchId).first<Record<string, unknown>>();
+  if (!match) return c.json({ error: "Match not found" }, 404);
+  if (match.status !== 'completed') return c.json({ error: "Can only review completed matches" }, 400);
+
+  // Determine target: if reviewer is requester → target is responder, vice versa
+  const isRequester = user.id === match.requester_id;
+  const targetId = isRequester ? match.responder_id as string : match.requester_id as string;
+
+  // Check if already reviewed
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM onda_reviews WHERE match_id = ? AND reviewer_id = ?"
+  ).bind(body.matchId, user.id).first();
+  if (existing) return c.json({ error: "Already reviewed" }, 409);
+
+  const reviewId = crypto.randomUUID();
+  await c.env.DB.prepare(
+    "INSERT INTO onda_reviews (id, match_id, reviewer_id, target_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(reviewId, body.matchId, user.id, targetId, body.rating, body.comment || "").run();
+
+  // Update responder average rating (if target is responder)
+  if (isRequester) {
+    const avg = await c.env.DB.prepare(
+      "SELECT AVG(rating) as avg_rating FROM onda_reviews WHERE target_id = ?"
+    ).bind(targetId).first<{ avg_rating: number }>();
+    if (avg) {
+      await c.env.DB.prepare("UPDATE onda_responders SET rating = ? WHERE user_id = ?")
+        .bind(Math.round(avg.avg_rating * 10) / 10, targetId).run();
+    }
+  }
+
+  return c.json({ ok: true, reviewId });
+});
+
+// GET /api/reviews/:matchId — 매치의 리뷰 조회
+app.get("/api/reviews/:matchId", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const matchId = c.req.param("matchId");
+  const result = await c.env.DB.prepare(
+    "SELECT r.*, u.name as reviewer_name FROM onda_reviews r JOIN onda_users u ON u.id = r.reviewer_id WHERE r.match_id = ?"
+  ).bind(matchId).all();
+  return c.json({ reviews: result.results });
+});
+
+// ===== 채팅 =====
+
+// POST /api/chat/:matchId — 메시지 전송
+app.post("/api/chat/:matchId", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const matchId = c.req.param("matchId");
+  const { content } = await c.req.json<{ content: string }>();
+  if (!content?.trim()) return c.json({ error: "content required" }, 400);
+
+  // Verify user is part of this match
+  const match = await c.env.DB.prepare(
+    "SELECT m.responder_id, r.requester_id FROM onda_matches m JOIN onda_requests r ON r.id = m.request_id WHERE m.id = ?"
+  ).bind(matchId).first<{ responder_id: string; requester_id: string }>();
+  if (!match) return c.json({ error: "Match not found" }, 404);
+  if (user.id !== match.responder_id && user.id !== match.requester_id && user.role !== 'admin') {
+    return c.json({ error: "Not part of this match" }, 403);
+  }
+
+  await c.env.DB.prepare(
+    "INSERT INTO onda_messages (match_id, sender_id, content) VALUES (?, ?, ?)"
+  ).bind(matchId, user.id, content.trim().slice(0, 500)).run();
+
+  return c.json({ ok: true });
+});
+
+// GET /api/chat/:matchId — 메시지 목록 (폴링)
+app.get("/api/chat/:matchId", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const matchId = c.req.param("matchId");
+  const after = c.req.query("after") || "0"; // message ID cursor
+
+  const result = await c.env.DB.prepare(
+    `SELECT m.id, m.sender_id, m.content, m.created_at, u.name as sender_name
+     FROM onda_messages m JOIN onda_users u ON u.id = m.sender_id
+     WHERE m.match_id = ? AND m.id > ?
+     ORDER BY m.id ASC LIMIT 50`
+  ).bind(matchId, parseInt(after)).all();
+
+  return c.json({ messages: result.results });
 });
 
 export { app as responderRoutes };

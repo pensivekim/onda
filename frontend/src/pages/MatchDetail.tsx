@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api';
 import NavBar from '../components/NavBar';
 import StatusBadge from '../components/StatusBadge';
+import ChatPanel from '../components/ChatPanel';
+import ReviewPanel from '../components/ReviewPanel';
 import { useLang } from '../i18n';
 
 export default function MatchDetail() {
@@ -66,6 +68,16 @@ export default function MatchDetail() {
             style={{ boxShadow: '0px 12px 32px rgba(183,16,42,0.2)' }}>
             {action.label}
           </button>
+        )}
+
+        {/* Chat */}
+        {['accepted','moving','arrived','in_progress'].includes(match.status) && (
+          <div className="mt-4"><ChatPanel matchId={id!} /></div>
+        )}
+
+        {/* Review after completion */}
+        {match.status === 'completed' && (
+          <div className="mt-4"><ReviewPanel matchId={id!} /></div>
         )}
       </div>
     </div>

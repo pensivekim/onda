@@ -14,10 +14,9 @@
 | DB | Cloudflare D1 |
 | 위치캐시 | Cloudflare KV (TTL 30초) |
 | 파일저장 | Cloudflare R2 (자격증/신분증) |
-| 매칭엔진 | Cloudflare Durable Objects |
-| 결제 | Paddle (토스/포트원/KG이니시스 사용 안 함) |
-| 알림 | NHN Cloud 알림톡 |
-| 인증 | 카카오 OAuth |
+| 결제 | Paddle (KYB 승인 대기 중, 토스/포트원 사용 안 함) |
+| 알림 | 웹 푸시 (VAPID, 알림톡 제거) |
+| 인증 | 카카오 + 구글 OAuth + 이메일+비번 (admin) |
 | 연동 | hi.genomic.cc (AI 감지 → webhook) |
 
 ## 작업 규칙
@@ -41,23 +40,35 @@
 
 ## 사용자 유형
 - **요청자**: 맞벌이 부모, 독거노인 가족, 장애인 본인/가족
-- **출동자**: 레드(의료인) / 오렌지(전문돌봄) / 그린(검증시민) — MVP는 그린만
+- **출동자 등급**:
+  - 🟢 그린: 검증된 일반 시민 (기본 조치, 동행)
+  - 🟠 오렌지: 요양보호사/사회복지사/보육교사 (자격증 필수)
+  - 🔴 레드: 의사/간호사/응급구조사 (Phase 3)
 - **관리자**: 출동자 승인, 요청/매칭/정산 모니터링
 
-## MVP 범위 (Phase 1)
-1. 카카오 로그인
-2. 출동자 가입 (서류 R2 업로드 + 관리자 승인)
-3. 요청자 긴급 요청 생성
-4. 매칭 (반경 3km + 60초 타임아웃)
-5. 상태 5단계 (수락→이동중→도착→돌봄중→완료)
-6. NHN 알림톡
-7. 관리자 승인 + 수동 정산
-8. PWA UI
+## Phase 1 (MVP) — 완료
+- 카카오 + 구글 OAuth + 관리자 이메일 로그인
+- 출동자 가입 (서류 R2 업로드 + 관리자 승인)
+- 요청자 긴급 요청 생성 (위치 자동 감지)
+- 매칭 (반경 3km KV 검색)
+- 상태 5단계 (수락→이동중→도착→돌봄중→완료)
+- 웹 푸시 알림
+- 관리자 대시보드 (통계/승인/요청/정산)
+- PWA + SPA + 22개 언어 i18n
+- hi.genomic.cc webhook API
+
+## Phase 2 (현재 진행)
+1. ✅ 오렌지 등급 (자격증 검증 + 등급별 요금)
+2. ✅ 리뷰/평점 (완료 후 양방향 평가)
+3. ✅ 채팅 (요청자-출동자 실시간)
+4. ✅ hi.genomic.cc webhook 자동 출동 요청 고도화
+5. ⏳ Paddle 결제 + Payouts (KYB 승인 후)
 
 ## 배포 명령어
-- 프론트: `cd frontend && npm run build && npx wrangler pages deploy dist --project-name onda`
-- 백엔드: `cd backend && npx wrangler deploy`
+- 프론트 빌드: `cd frontend && npx vite build`
+- 프론트 배포: `cd frontend && npx wrangler pages deploy dist --project-name onda`
+- 백엔드 배포: `cd backend && npx wrangler deploy`
 
 ## 관련 프로젝트
-- hi.genomic.cc: AI 감지 (webhook 연동, Phase 2)
+- hi.genomic.cc: AI 감지 (낙상/화재/배회 → webhook 자동 연동)
 - 전체 맵: C:\Users\admin\PROJECTS.md

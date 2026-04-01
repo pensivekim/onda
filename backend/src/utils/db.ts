@@ -83,6 +83,22 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       memo TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS onda_reviews (
+      id TEXT PRIMARY KEY,
+      match_id TEXT NOT NULL,
+      reviewer_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      rating INTEGER NOT NULL,
+      comment TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS onda_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      match_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
   ]);
 
   // Indexes (ignore if exists)
@@ -93,6 +109,8 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
     "CREATE INDEX IF NOT EXISTS idx_matches_request ON onda_matches(request_id)",
     "CREATE INDEX IF NOT EXISTS idx_matches_responder ON onda_matches(responder_id)",
     "CREATE INDEX IF NOT EXISTS idx_responders_available ON onda_responders(status, available)",
+    "CREATE INDEX IF NOT EXISTS idx_reviews_match ON onda_reviews(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_match ON onda_messages(match_id, created_at)",
   ];
   for (const sql of indexes) {
     try { await db.prepare(sql).run(); } catch {}

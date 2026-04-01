@@ -10,7 +10,7 @@ export default function ResponderHome() {
   const { t } = useLang();
   const [responder, setResponder] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
-  const [regForm, setRegForm] = useState({ bio: '', phone: '' });
+  const [regForm, setRegForm] = useState({ bio: '', phone: '', grade: 'green' });
   const [certFile, setCertFile] = useState<File | null>(null);
   const [registering, setRegistering] = useState(false);
   const watchRef = useRef<number | null>(null);
@@ -41,7 +41,7 @@ export default function ResponderHome() {
 
   const register = async () => {
     setRegistering(true);
-    await api.post('/api/responders/register', { bio: regForm.bio, phone: regForm.phone }, token!);
+    await api.post('/api/responders/register', { bio: regForm.bio, phone: regForm.phone, grade: regForm.grade }, token!);
     // Upload cert photo if selected
     if (certFile) {
       const fd = new FormData();
@@ -64,6 +64,17 @@ export default function ResponderHome() {
           <p className="text-on-surface-variant text-sm">{t('needRegisterSub')}</p>
         </div>
         <div className="flex flex-col gap-3">
+          <div>
+            <label className="text-sm font-semibold text-on-surface-variant mb-1 block">출동자 등급</label>
+            <select value={regForm.grade} onChange={e => setRegForm({ ...regForm, grade: e.target.value })}
+              className="w-full p-3.5 rounded-xl bg-surface-low text-on-surface outline-none">
+              <option value="green">🟢 그린 — 검증된 시민 (시급 25,000원)</option>
+              <option value="orange">🟠 오렌지 — 요양보호사/사회복지사 (시급 40,000원)</option>
+            </select>
+            {regForm.grade === 'orange' && (
+              <p className="text-xs text-orange-grade mt-1">자격증 사진 업로드가 필요합니다</p>
+            )}
+          </div>
           <input value={regForm.phone} onChange={e => setRegForm({ ...regForm, phone: e.target.value })}
             placeholder="전화번호" type="tel"
             className="w-full p-3.5 rounded-xl bg-surface-low text-on-surface outline-none focus:ring-2 focus:ring-primary/30"/>

@@ -31,9 +31,12 @@ app.post("/api/dispatch/create", requireAuth(), async (c) => {
   ).run();
 
   // 2. Find available responders nearby (KV location scan)
+  // 등급 필터: green은 모든 요청, orange는 orange+green 요청, red는 모두
+  const gradeReq = body.type === 'elder' ? 'green' : 'green'; // 기본 green, 요청 시 지정 가능
+  const gradeFilter = gradeReq === 'orange' ? "AND grade IN ('orange','red')" : gradeReq === 'red' ? "AND grade = 'red'" : "";
   const approvedResponders = await c.env.DB.prepare(
-    "SELECT user_id FROM onda_responders WHERE status = 'approved' AND available = 1"
-  ).bind().all<{ user_id: string }>();
+    `SELECT user_id, grade FROM onda_responders WHERE status = 'approved' AND available = 1 ${gradeFilter}`
+  ).bind().all<{ user_id: string; grade: string }>();
 
   let candidateCount = 0;
   for (const r of approvedResponders.results) {
@@ -81,12 +84,13 @@ app.get("/api/dispatch/:requestId/status", requireAuth(), async (c) => {
   return c.json({ request, matches: matches.results, activeMatch: activeMatch || null });
 });
 
-// POST /api/dispatch/webhook — hi.genomic.cc webhook (Phase 2)
+// POST /api/dispatch/webhook — hi.genomic.cc webhook (자동 출동 요청 + 매칭)
 app.post("/api/dispatch/webhook", async (c) => {
   await ensureAllTables(c.env.DB);
   const body = await c.req.json<{
     event_type: string; facility_id: string;
     lat?: number; lng?: number; address?: string; detail?: string;
+    phone?: string; facility_name?: string;
   }>();
 
   // Log webhook
@@ -95,14 +99,41 @@ app.post("/api/dispatch/webhook", async (c) => {
   ).bind(body.event_type, body.facility_id, JSON.stringify(body)).run();
 
   // Auto-create request from hi event
-  const typeMap: Record<string, string> = { fall: "elder", fire: "other", intrusion: "other", wander: "elder" };
+  const typeMap: Record<string, string> = { fall: "elder", fire: "other", intrusion: "other", wander: "elder", sound: "other" };
+  const urgencyMap: Record<string, string> = { fall: "emergency", fire: "emergency", intrusion: "urgent", wander: "urgent", sound: "normal" };
+  const reqLat = body.lat || 0;
+  const reqLng = body.lng || 0;
   const requestId = crypto.randomUUID();
+  const description = `[hi.genomic.cc] ${body.facility_name || body.facility_id} - ${body.event_type}: ${body.detail || "AI auto-detected"}`;
+
   await c.env.DB.prepare(
     `INSERT INTO onda_requests (id, requester_id, type, address, lat, lng, description, urgency, source)
-     VALUES (?, 'hi_system', ?, ?, ?, ?, ?, 'emergency', 'hi_webhook')`
-  ).bind(requestId, typeMap[body.event_type] || "other", body.address || "", body.lat || 0, body.lng || 0, `[hi.genomic.cc] ${body.event_type}: ${body.detail || ""}`).run();
+     VALUES (?, 'hi_system', ?, ?, ?, ?, ?, ?, 'hi_webhook')`
+  ).bind(requestId, typeMap[body.event_type] || "other", body.address || "", reqLat, reqLng, description, urgencyMap[body.event_type] || "urgent").run();
 
-  return c.json({ ok: true, requestId });
+  // Auto-match: find nearby responders and create offers
+  let candidateCount = 0;
+  if (reqLat !== 0 && reqLng !== 0) {
+    const gradeNeeded = (body.event_type === 'fall') ? 'orange' : 'green';
+    const gradeFilter = gradeNeeded === 'orange' ? "AND grade IN ('orange','red')" : "";
+    const responders = await c.env.DB.prepare(
+      `SELECT user_id FROM onda_responders WHERE status = 'approved' AND available = 1 ${gradeFilter}`
+    ).bind().all<{ user_id: string }>();
+
+    for (const r of responders.results) {
+      const locStr = await c.env.LOCATION_KV.get(`loc:${r.user_id}`);
+      if (!locStr) continue;
+      const [lat, lng] = locStr.split(",").map(Number);
+      if (haversine(reqLat, reqLng, lat, lng) <= MATCH_RADIUS_KM) {
+        await c.env.DB.prepare(
+          "INSERT INTO onda_matches (id, request_id, responder_id, status) VALUES (?, ?, ?, 'offered')"
+        ).bind(crypto.randomUUID(), requestId, r.user_id).run();
+        candidateCount++;
+      }
+    }
+  }
+
+  return c.json({ ok: true, requestId, candidateCount, urgency: urgencyMap[body.event_type] || "urgent" });
 });
 
 export { app as matchRoutes };
