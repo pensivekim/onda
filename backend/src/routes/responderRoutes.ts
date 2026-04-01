@@ -21,7 +21,35 @@ app.post("/api/responders/register", requireAuth(), async (c) => {
     "INSERT INTO onda_responders (user_id, bio, grade) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = ?, grade = ?"
   ).bind(user.id, body.bio || "", grade, body.bio || "", grade).run();
 
-  return c.json({ ok: true, status: "pending" });
+  return c.json({ ok: true, status: "pending", grade });
+});
+
+// POST /api/responders/upload-license — 면허증 업로드 (레드/오렌지 등급)
+app.post("/api/responders/upload-license", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const body = await c.req.json<{ licenseType: string; licenseNumber?: string }>();
+  if (!body.licenseType) return c.json({ error: "licenseType required" }, 400);
+
+  const validTypes = ['nurse', 'doctor', 'emt', 'caregiver', 'social_worker', 'childcare_teacher'];
+  if (!validTypes.includes(body.licenseType)) return c.json({ error: "Invalid license type" }, 400);
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    "INSERT INTO onda_licenses (id, responder_id, license_type, license_number) VALUES (?, ?, ?, ?)"
+  ).bind(id, user.id, body.licenseType, body.licenseNumber || "").run();
+
+  return c.json({ ok: true, licenseId: id });
+});
+
+// GET /api/responders/licenses — 내 면허 목록
+app.get("/api/responders/licenses", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const result = await c.env.DB.prepare(
+    "SELECT * FROM onda_licenses WHERE responder_id = ? ORDER BY created_at DESC"
+  ).bind(user.id).all();
+  return c.json({ licenses: result.results });
 });
 
 // POST /api/responders/upload-cert — 자격증 사진 업로드 (R2)
@@ -137,6 +165,37 @@ app.patch("/api/matches/:id/status", requireAuth(), async (c) => {
     await c.env.DB.prepare("UPDATE onda_requests SET status = 'completed' WHERE id = ?").bind(match.request_id).run();
     // Update responder stats
     await c.env.DB.prepare("UPDATE onda_responders SET total_done = total_done + 1 WHERE user_id = ?").bind(user.id).run();
+
+    // Check if requester is gov beneficiary or sponsor covers cost
+    const request = await c.env.DB.prepare("SELECT requester_id, type FROM onda_requests WHERE id = ?").bind(match.request_id).first<{ requester_id: string; type: string }>();
+    if (request) {
+      // Gov contract: check if requester is a beneficiary
+      const govBen = await c.env.DB.prepare(
+        `SELECT b.contract_id, g.budget, g.spent FROM onda_gov_beneficiaries b
+         JOIN onda_gov_contracts g ON g.id = b.contract_id
+         WHERE b.user_id = ? AND b.status = 'active' AND g.status = 'active' LIMIT 1`
+      ).bind(request.requester_id).first<{ contract_id: string; budget: number; spent: number }>();
+      if (govBen && govBen.spent + amount <= govBen.budget) {
+        await c.env.DB.prepare("UPDATE onda_gov_contracts SET spent = spent + ?, used_requests_month = used_requests_month + 1 WHERE id = ?")
+          .bind(amount, govBen.contract_id).run();
+        await c.env.DB.prepare("UPDATE onda_settlements SET status = 'gov_covered' WHERE match_id = ?").bind(matchId).run();
+      }
+
+      // Sponsor: check active sponsors covering this region/type
+      if (!govBen) {
+        const sponsor = await c.env.DB.prepare(
+          `SELECT id, budget, spent FROM onda_sponsors
+           WHERE status = 'active' AND target_types LIKE ? AND spent + ? <= budget
+           ORDER BY spent ASC LIMIT 1`
+        ).bind(`%${request.type}%`, amount).first<{ id: string; budget: number; spent: number }>();
+        if (sponsor) {
+          await c.env.DB.prepare("UPDATE onda_sponsors SET spent = spent + ? WHERE id = ?").bind(amount, sponsor.id).run();
+          await c.env.DB.prepare("INSERT INTO onda_sponsor_usage (id, sponsor_id, request_id, match_id, amount) VALUES (?, ?, ?, ?, ?)")
+            .bind(crypto.randomUUID(), sponsor.id, match.request_id as string, matchId, amount).run();
+          await c.env.DB.prepare("UPDATE onda_settlements SET status = 'sponsor_covered' WHERE match_id = ?").bind(matchId).run();
+        }
+      }
+    }
   }
 
   await c.env.DB.prepare(`UPDATE onda_matches SET ${updates.join(", ")} WHERE id = ?`).bind(matchId).run();

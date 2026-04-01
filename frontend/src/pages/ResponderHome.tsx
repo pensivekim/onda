@@ -69,10 +69,13 @@ export default function ResponderHome() {
             <select value={regForm.grade} onChange={e => setRegForm({ ...regForm, grade: e.target.value })}
               className="w-full p-3.5 rounded-xl bg-surface-low text-on-surface outline-none">
               <option value="green">🟢 그린 — 검증된 시민 (시급 25,000원)</option>
-              <option value="orange">🟠 오렌지 — 요양보호사/사회복지사 (시급 40,000원)</option>
+              <option value="orange">🟠 오렌지 — 요양보호사/사회복지사/보육교사 (시급 40,000원)</option>
+              <option value="red">🔴 레드 — 의사/간호사/응급구조사 (시급 80,000원)</option>
             </select>
-            {regForm.grade === 'orange' && (
-              <p className="text-xs text-orange-grade mt-1">자격증 사진 업로드가 필요합니다</p>
+            {(regForm.grade === 'orange' || regForm.grade === 'red') && (
+              <p className={`text-xs mt-1 ${regForm.grade === 'red' ? 'text-error' : 'text-orange-grade'}`}>
+                {regForm.grade === 'red' ? '의료 면허증 사진 업로드가 필요합니다' : '자격증 사진 업로드가 필요합니다'}
+              </p>
             )}
           </div>
           <input value={regForm.phone} onChange={e => setRegForm({ ...regForm, phone: e.target.value })}
