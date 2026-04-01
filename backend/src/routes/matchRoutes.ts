@@ -4,8 +4,33 @@ import { ensureAllTables } from "../utils/db";
 import { requireAuth, getUser } from "../utils/auth";
 import { haversine } from "../utils/geo";
 import { getRegion } from "../utils/regions";
+import { callLLM } from "../utils/llm";
+import { TRIAGE_SYSTEM_PROMPT, parseTriageResult } from "../utils/triage";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// POST /api/triage — AI 상황 판단 (등급 추천)
+app.post("/api/triage", requireAuth(), async (c) => {
+  const body = await c.req.json<{ description: string }>();
+  if (!body.description?.trim()) return c.json({ error: "description required" }, 400);
+
+  try {
+    const llmOutput = await callLLM(c.env as any, TRIAGE_SYSTEM_PROMPT, body.description.trim(), 256);
+    const result = parseTriageResult(llmOutput);
+    return c.json({ ok: true, ...result });
+  } catch (e) {
+    console.error("[Triage] LLM error:", (e as Error).message);
+    // Fallback: conservative
+    return c.json({
+      ok: true,
+      grade: "orange",
+      urgency: "urgent",
+      reason: "AI unavailable — professional care recommended as precaution",
+      call119: false,
+      advice: "If the person is unresponsive, call 119 immediately",
+    });
+  }
+});
 
 // POST /api/dispatch/create — 요청 생성 + 매칭 시작
 app.post("/api/dispatch/create", requireAuth(), async (c) => {

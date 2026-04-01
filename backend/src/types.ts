@@ -16,4 +16,6 @@ export interface Env {
   LINE_CHANNEL_ID: string;
   LINE_CHANNEL_SECRET: string;
   PADDLE_WEBHOOK_SECRET: string;
+  GEMINI_API_KEY: string;
+  OPENAI_API_KEY: string;
 }
