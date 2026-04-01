@@ -172,4 +172,61 @@ app.post("/api/auth/refresh", async (c) => {
   return c.json({ token: newToken });
 });
 
+// ===== Email + Password Login =====
+app.post("/api/auth/login", async (c) => {
+  await ensureAllTables(c.env.DB);
+  const { email, password } = await c.req.json<{ email: string; password: string }>();
+  if (!email || !password) return c.json({ error: "email and password required" }, 400);
+
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, password_hash, name, role FROM onda_users WHERE email = ?"
+  ).bind(email.toLowerCase().trim()).first<{ id: string; email: string; password_hash: string; name: string; role: string }>();
+
+  if (!user || !user.password_hash) return c.json({ error: "Invalid credentials" }, 401);
+
+  // PBKDF2 verify
+  const [saltB64, hashB64] = user.password_hash.split(":");
+  if (!saltB64 || !hashB64) return c.json({ error: "Invalid credentials" }, 401);
+  const salt = Uint8Array.from(atob(saltB64), ch => ch.charCodeAt(0));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const hash = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" }, key, 256);
+  const computedB64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
+  if (computedB64 !== hashB64) return c.json({ error: "Invalid credentials" }, 401);
+
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await signToken({ sub: user.id, name: user.name, role: user.role, email: user.email, type: "access", iat: now, exp: now + 86400 }, c.env.JWT_SECRET);
+  const refreshToken = await signToken({ sub: user.id, name: user.name, role: user.role, type: "refresh", iat: now, exp: now + 86400 * 30 }, c.env.JWT_SECRET);
+
+  return c.json({ ok: true, token: accessToken, refreshToken, user: { id: user.id, name: user.name, role: user.role } });
+});
+
+// ===== Email + Password Register =====
+app.post("/api/auth/register", async (c) => {
+  await ensureAllTables(c.env.DB);
+  const { email, password, name } = await c.req.json<{ email: string; password: string; name: string }>();
+  if (!email || !password || !name) return c.json({ error: "email, password, name required" }, 400);
+
+  // Check existing
+  const existing = await c.env.DB.prepare("SELECT id FROM onda_users WHERE email = ?").bind(email.toLowerCase().trim()).first();
+  if (existing) return c.json({ error: "Email already registered" }, 409);
+
+  // Hash password (PBKDF2)
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const hash = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" }, key, 256);
+  const saltB64 = btoa(String.fromCharCode(...salt));
+  const hashB64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
+  const passwordHash = saltB64 + ":" + hashB64;
+
+  const userId = crypto.randomUUID();
+  // Add password_hash column if not exists
+  try { await c.env.DB.prepare("ALTER TABLE onda_users ADD COLUMN password_hash TEXT").run(); } catch {}
+
+  await c.env.DB.prepare(
+    "INSERT INTO onda_users (id, email, name, role, password_hash) VALUES (?, ?, ?, 'admin', ?)"
+  ).bind(userId, email.toLowerCase().trim(), name, passwordHash).run();
+
+  return c.json({ ok: true, userId });
+});
+
 export { app as authRoutes };
