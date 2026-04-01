@@ -6,6 +6,25 @@ interface AuthCtx { user: User | null; token: string | null; login: (t: string, 
 
 const AuthContext = createContext<AuthCtx>({ user: null, token: null, login: () => {}, logout: () => {}, loading: true });
 
+// Push subscription
+async function initPush(token: string) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw-push.js');
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return; // already subscribed
+
+    const keyRes = await api.get('/api/push/vapid-key');
+    if (!keyRes.publicKey) return;
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: keyRes.publicKey,
+    });
+    await api.post('/api/push/subscribe', { subscription: sub.toJSON() }, token);
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('onda_token'));
@@ -14,7 +33,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) { setLoading(false); return; }
     api.post('/api/auth/verify', { token }).then((d: any) => {
-      if (d.valid) setUser({ id: d.userId, name: d.name, role: d.role });
+      if (d.valid) {
+        setUser({ id: d.userId, name: d.name, role: d.role });
+        // Init push after login verified
+        setTimeout(() => initPush(token), 3000);
+      }
       else { localStorage.removeItem('onda_token'); setToken(null); }
     }).catch(() => {}).finally(() => setLoading(false));
   }, [token]);

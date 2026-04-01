@@ -6,6 +6,7 @@ import { requestRoutes } from "./routes/requestRoutes";
 import { responderRoutes } from "./routes/responderRoutes";
 import { matchRoutes } from "./routes/matchRoutes";
 import { adminRoutes } from "./routes/adminRoutes";
+import { pushRoutes } from "./routes/pushRoutes";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -31,6 +32,7 @@ app.route("/", requestRoutes);
 app.route("/", responderRoutes);
 app.route("/", matchRoutes);
 app.route("/", adminRoutes);
+app.route("/", pushRoutes);
 
 // Health
 app.get("/health", (c) => c.json({ status: "ok", service: "onda-backend", timestamp: new Date().toISOString() }));
