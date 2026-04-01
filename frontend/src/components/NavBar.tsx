@@ -9,7 +9,10 @@ export default function NavBar() {
   return (
     <nav className="sticky top-0 z-50 backdrop-blur-[20px] bg-surface/80" style={{ borderBottom: 'none' }}>
       <div className="max-w-2xl mx-auto flex items-center justify-between px-5 py-3">
-        <Link to="/" className="font-display text-xl font-extrabold text-primary tracking-tight">온다</Link>
+        <Link to="/" className="flex flex-col">
+          <span className="font-display text-xl font-extrabold text-primary tracking-tight leading-none">온다</span>
+          <span className="text-[8px] text-on-surface-variant leading-tight mt-0.5">한국의 돌봄이 세계로<br/>Korean Care for the World</span>
+        </Link>
         <div className="flex items-center gap-3">
           <LangSelector />
           {user ? (
