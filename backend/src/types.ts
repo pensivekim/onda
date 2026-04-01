@@ -13,4 +13,6 @@ export interface Env {
   FRONTEND_URL: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
+  LINE_CHANNEL_ID: string;
+  LINE_CHANNEL_SECRET: string;
 }

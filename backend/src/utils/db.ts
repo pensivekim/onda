@@ -4,6 +4,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       id TEXT PRIMARY KEY,
       kakao_id TEXT UNIQUE,
       google_id TEXT UNIQUE,
+      line_id TEXT UNIQUE,
       name TEXT,
       phone TEXT,
       email TEXT,
@@ -177,6 +178,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
   const indexes = [
     "CREATE INDEX IF NOT EXISTS idx_users_kakao ON onda_users(kakao_id)",
     "CREATE INDEX IF NOT EXISTS idx_users_google ON onda_users(google_id)",
+    "CREATE INDEX IF NOT EXISTS idx_users_line ON onda_users(line_id)",
     "CREATE INDEX IF NOT EXISTS idx_requests_requester ON onda_requests(requester_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_matches_request ON onda_matches(request_id)",
     "CREATE INDEX IF NOT EXISTS idx_matches_responder ON onda_matches(responder_id)",

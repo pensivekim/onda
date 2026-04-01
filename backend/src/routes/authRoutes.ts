@@ -146,6 +146,82 @@ app.get("/api/auth/google/callback", async (c) => {
   return c.redirect(`${c.env.FRONTEND_URL}/login?token=${accessToken}&refresh_token=${refreshToken}`);
 });
 
+// ===== LINE OAuth =====
+app.get("/api/auth/line", (c) => {
+  const channelId = c.env.LINE_CHANNEL_ID;
+  if (!channelId) return c.json({ error: "LINE not configured" }, 503);
+  const redirectUri = `https://onda-backend.pensive-kim.workers.dev/api/auth/line/callback`;
+  const state = crypto.randomUUID().slice(0, 8);
+  const url = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=profile%20openid`;
+  return c.redirect(url);
+});
+
+app.get("/api/auth/line/callback", async (c) => {
+  const code = c.req.query("code");
+  if (!code) return c.redirect(`${c.env.FRONTEND_URL}/login?error=missing_code`);
+
+  const channelId = c.env.LINE_CHANNEL_ID;
+  const channelSecret = c.env.LINE_CHANNEL_SECRET;
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!channelId || !channelSecret || !jwtSecret) return c.redirect(`${c.env.FRONTEND_URL}/login?error=server_error`);
+
+  const redirectUri = `https://onda-backend.pensive-kim.workers.dev/api/auth/line/callback`;
+
+  // Exchange code for token
+  const tokenRes = await fetch("https://api.line.me/oauth2/v2.1/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+      client_id: channelId,
+      client_secret: channelSecret,
+    }).toString(),
+  });
+  if (!tokenRes.ok) return c.redirect(`${c.env.FRONTEND_URL}/login?error=auth_failed`);
+  const tokenData = await tokenRes.json<{ access_token: string; id_token?: string }>();
+
+  // Get user profile
+  const profileRes = await fetch("https://api.line.me/v2/profile", {
+    headers: { Authorization: `Bearer ${tokenData.access_token}` },
+  });
+  if (!profileRes.ok) return c.redirect(`${c.env.FRONTEND_URL}/login?error=auth_failed`);
+  const profile = await profileRes.json<{ userId: string; displayName: string; pictureUrl?: string }>();
+
+  const lineId = profile.userId;
+  const nickname = profile.displayName || "";
+  const profileImage = profile.pictureUrl || "";
+
+  // line_id column migration
+  await ensureAllTables(c.env.DB);
+  try { await c.env.DB.prepare("ALTER TABLE onda_users ADD COLUMN line_id TEXT UNIQUE").run(); } catch {}
+
+  const existing = await c.env.DB.prepare("SELECT id, role FROM onda_users WHERE line_id = ?").bind(lineId).first<{ id: string; role: string }>();
+
+  let userId: string;
+  let role: string;
+  if (existing) {
+    userId = existing.id;
+    role = existing.role;
+    await c.env.DB.prepare("UPDATE onda_users SET name = ?, profile_image = ? WHERE id = ?").bind(nickname, profileImage, userId).run();
+  } else {
+    userId = crypto.randomUUID();
+    role = "requester";
+    // Detect region by LINE (JP/TH/ID)
+    const region = "JP"; // Default for LINE users — can refine later
+    await c.env.DB.prepare(
+      "INSERT INTO onda_users (id, line_id, name, profile_image, role, region) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(userId, lineId, nickname, profileImage, role, region).run();
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = await signToken({ sub: userId, name: nickname, role, type: "access", iat: now, exp: now + 86400 }, jwtSecret);
+  const refreshToken = await signToken({ sub: userId, name: nickname, role, type: "refresh", iat: now, exp: now + 86400 * 30 }, jwtSecret);
+
+  return c.redirect(`${c.env.FRONTEND_URL}/login?token=${accessToken}&refresh_token=${refreshToken}`);
+});
+
 // ===== Token Verify =====
 app.post("/api/auth/verify", async (c) => {
   const { token } = await c.req.json<{ token: string }>();
