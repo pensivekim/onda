@@ -57,12 +57,19 @@
 - PWA + SPA + 22개 언어 i18n
 - hi.genomic.cc webhook API
 
-## Phase 2 (현재 진행)
-1. ✅ 오렌지 등급 (자격증 검증 + 등급별 요금)
+## Phase 2 (완료)
+1. ✅ 오렌지 등급 (자격증 검증 + 등급별 요금 25k/40k/80k)
 2. ✅ 리뷰/평점 (완료 후 양방향 평가)
-3. ✅ 채팅 (요청자-출동자 실시간)
-4. ✅ hi.genomic.cc webhook 자동 출동 요청 고도화
+3. ✅ 채팅 (요청자-출동자 실시간 3초 폴링)
+4. ✅ hi.genomic.cc webhook 자동 출동 요청 (긴급도 매핑 + 자동 매칭)
 5. ⏳ Paddle 결제 + Payouts (KYB 승인 후)
+
+## Phase 3 (완료)
+1. ✅ 레드 등급 (의사/간호사/응급구조사 면허 검증 + 자동 등급 승격)
+2. ✅ 지자체 계약 (예산/수혜자/월별한도 + 자동 대납)
+3. ✅ 기업 스폰서 (CSR 예산 + 사용내역 + 자동 커버)
+4. ✅ KBS 마케팅 API (GET /api/public/impact + /api/public/sponsors)
+5. ✅ 관리자 대시보드 7탭 (통계/승인/면허/요청/정산/지자체/스폰서)
 
 ## 배포 명령어
 - 프론트 빌드: `cd frontend && npx vite build`
