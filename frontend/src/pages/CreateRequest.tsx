@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api';
@@ -9,8 +9,23 @@ export default function CreateRequest() {
   const { token } = useAuth();
   const nav = useNavigate();
   const { t } = useLang();
-  const [form, setForm] = useState({ type: 'child', address: '', description: '', urgency: 'normal' });
+  const [form, setForm] = useState({ type: 'child', address: '', description: '', urgency: 'normal', lat: 0, lng: 0 });
   const [loading, setLoading] = useState(false);
+  const [locStatus, setLocStatus] = useState('');
+
+  // Auto-detect location on mount
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    setLocStatus('위치 감지 중...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(f => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude }));
+        setLocStatus(`위치 감지 완료 (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
+      },
+      () => setLocStatus('위치 감지 실패 — 주소를 직접 입력해주세요'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
 
   const submit = async () => {
     if (!form.address) return;
@@ -41,6 +56,7 @@ export default function CreateRequest() {
             <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
               placeholder={t('addressPlaceholder')}
               className="w-full p-3.5 rounded-xl bg-surface-low text-on-surface font-body outline-none focus:ring-2 focus:ring-primary/30"/>
+            {locStatus && <p className="text-xs text-on-surface-variant mt-1">{locStatus}</p>}
           </div>
           <div>
             <label className="text-sm font-semibold text-on-surface-variant mb-1 block">{t('descLabel')}</label>
