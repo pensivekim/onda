@@ -56,12 +56,12 @@ export default function AdminDashboard() {
   const TABS: { key: Tab; label: string }[] = [
     { key: 'stats', label: t('tabStats') },
     { key: 'responders', label: t('tabResponders') },
-    { key: 'licenses', label: '면허검증' },
-    { key: 'safety', label: '안전관리' },
+    { key: 'licenses', label: t('tabLicenses') },
+    { key: 'safety', label: t('tabSafety') },
     { key: 'requests', label: t('tabRequests') },
     { key: 'settlements', label: t('tabSettlements') },
-    { key: 'gov', label: '지자체' },
-    { key: 'sponsors', label: '스폰서' },
+    { key: 'gov', label: t('tabGov') },
+    { key: 'sponsors', label: t('tabSponsors') },
   ];
 
   return (
@@ -86,9 +86,9 @@ export default function AdminDashboard() {
               { label: t('pendingResponders'), value: stats.pendingResponders },
               { label: t('requestsToday'), value: stats.requestsToday },
               { label: t('completedToday'), value: stats.completedToday },
-              { label: '경고 출동자', value: stats.warnedResponders || 0 },
-              { label: '정지 출동자', value: stats.suspendedResponders || 0 },
-              { label: '민원 대기', value: stats.pendingComplaints || 0 },
+              { label: t('warnedCount'), value: stats.warnedResponders || 0 },
+              { label: t('suspendedCount'), value: stats.suspendedResponders || 0 },
+              { label: t('pendingComplaintsLabel'), value: stats.pendingComplaints || 0 },
             ].map((s, i) => (
               <div key={i} className="bg-surface-card rounded-card p-5 text-center">
                 <div className="text-3xl font-display font-bold text-primary">{s.value}</div>
@@ -126,7 +126,7 @@ export default function AdminDashboard() {
               const interviews = verificationList.filter((r: any) => r.interview_status === 'scheduled');
               if (!interviews.length) return null;
               return <>
-                <h3 className="font-display font-bold mt-4 text-sm">{t('lang') === 'ko' ? '화상 인터뷰 예정' : 'Scheduled Interviews'} ({interviews.length})</h3>
+                <h3 className="font-display font-bold mt-4 text-sm">{t('interviewScheduled')} ({interviews.length})</h3>
                 {interviews.map((r: any) => (
                   <div key={r.user_id} className="bg-surface-card rounded-card p-4">
                     <div className="flex items-center justify-between mb-1">
@@ -135,7 +135,7 @@ export default function AdminDashboard() {
                     </div>
                     <button onClick={() => completeInterview(r.user_id)}
                       className="mt-2 w-full py-2 bg-trust-green text-white rounded-xl text-xs font-bold">
-                      {t('lang') === 'ko' ? '인터뷰 완료' : 'Interview Complete'}
+                      {t('interviewComplete')}
                     </button>
                   </div>
                 ))}
@@ -147,7 +147,7 @@ export default function AdminDashboard() {
         {/* License Verification */}
         {tab === 'licenses' && (
           <div className="flex flex-col gap-3">
-            {licenses.length === 0 ? <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">검증 대기 면허가 없습니다</div>
+            {licenses.length === 0 ? <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">{t('noLicenses')}</div>
             : licenses.map((l: any) => (
               <div key={l.id} className="bg-surface-card rounded-card p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -159,11 +159,11 @@ export default function AdminDashboard() {
                   </div>
                   <span className="text-xs bg-secondary-container text-secondary px-2 py-1 rounded-full">{LICENSE_LABELS[l.license_type] || l.license_type}</span>
                 </div>
-                {l.license_number && <p className="text-xs text-on-surface-variant mb-2">면허번호: {l.license_number}</p>}
+                {l.license_number && <p className="text-xs text-on-surface-variant mb-2">{t('licenseNo')}: {l.license_number}</p>}
                 {l.license_photo_url && <img src={l.license_photo_url} alt="license" className="w-full rounded-lg mb-2 max-h-40 object-cover"/>}
                 <div className="flex gap-2">
-                  <button onClick={() => verifyLicense(l.id)} className="flex-1 py-2 bg-trust-green text-white rounded-xl text-sm font-bold">검증 승인</button>
-                  <button onClick={() => rejectLicense(l.id)} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-sm font-bold">거부</button>
+                  <button onClick={() => verifyLicense(l.id)} className="flex-1 py-2 bg-trust-green text-white rounded-xl text-sm font-bold">{t('verifyBtn')}</button>
+                  <button onClick={() => rejectLicense(l.id)} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-sm font-bold">{t('rejectBtn')}</button>
                 </div>
               </div>
             ))}
@@ -173,8 +173,8 @@ export default function AdminDashboard() {
         {/* Safety Management */}
         {tab === 'safety' && (
           <div className="flex flex-col gap-4">
-            <h3 className="font-display font-bold">민원 대기 ({complaints.length}건)</h3>
-            {complaints.length === 0 ? <div className="bg-surface-low rounded-card p-6 text-center text-on-surface-variant text-sm">대기 중인 민원이 없습니다</div>
+            <h3 className="font-display font-bold">{t('complaintsTitle')} ({complaints.length})</h3>
+            {complaints.length === 0 ? <div className="bg-surface-low rounded-card p-6 text-center text-on-surface-variant text-sm">{t('noComplaints')}</div>
             : complaints.map((co: any) => (
               <div key={co.id} className="bg-surface-card rounded-card p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -183,15 +183,15 @@ export default function AdminDashboard() {
                 </div>
                 {co.detail && <p className="text-xs text-on-surface-variant mb-3">{co.detail}</p>}
                 <div className="flex gap-2">
-                  <button onClick={() => resolveComplaint(co.id, 'dismissed')} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-xs font-bold">기각</button>
-                  <button onClick={() => resolveComplaint(co.id, 'warning')} className="flex-1 py-2 bg-orange-grade-bg text-orange-grade rounded-xl text-xs font-bold">경고</button>
-                  <button onClick={() => resolveComplaint(co.id, 'suspended')} className="flex-1 py-2 bg-error-container text-error rounded-xl text-xs font-bold">정지</button>
+                  <button onClick={() => resolveComplaint(co.id, 'dismissed')} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-xs font-bold">{t('dismiss')}</button>
+                  <button onClick={() => resolveComplaint(co.id, 'warning')} className="flex-1 py-2 bg-orange-grade-bg text-orange-grade rounded-xl text-xs font-bold">{t('warn')}</button>
+                  <button onClick={() => resolveComplaint(co.id, 'suspended')} className="flex-1 py-2 bg-error-container text-error rounded-xl text-xs font-bold">{t('suspendAction')}</button>
                 </div>
               </div>
             ))}
 
-            <h3 className="font-display font-bold mt-4">경고/정지 출동자 ({warnedResponders.length}명)</h3>
-            {warnedResponders.length === 0 ? <div className="bg-surface-low rounded-card p-6 text-center text-on-surface-variant text-sm">경고/정지된 출동자가 없습니다</div>
+            <h3 className="font-display font-bold mt-4">{t('warnedTitle')} ({warnedResponders.length})</h3>
+            {warnedResponders.length === 0 ? <div className="bg-surface-low rounded-card p-6 text-center text-on-surface-variant text-sm">{t('noWarned')}</div>
             : warnedResponders.map((r: any) => (
               <div key={r.user_id} className="bg-surface-card rounded-card p-4">
                 <div className="flex items-center justify-between mb-1">
@@ -202,9 +202,9 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <p className="text-xs text-on-surface-variant">평점 {r.rating || '-'} / 완료 {r.total_done}건</p>
-                {r.suspended_reason && <p className="text-xs text-error mt-1">사유: {r.suspended_reason}</p>}
+                {r.suspended_reason && <p className="text-xs text-error mt-1">{t('reason')}: {r.suspended_reason}</p>}
                 {r.status === 'suspended' && (
-                  <button onClick={() => reinstateResponder(r.user_id)} className="mt-2 w-full py-2 bg-trust-green text-white rounded-xl text-xs font-bold">정지 해제</button>
+                  <button onClick={() => reinstateResponder(r.user_id)} className="mt-2 w-full py-2 bg-trust-green text-white rounded-xl text-xs font-bold">{t('reinstateBtn')}</button>
                 )}
               </div>
             ))}
@@ -243,8 +243,8 @@ export default function AdminDashboard() {
         {/* Gov Contracts */}
         {tab === 'gov' && (
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-on-surface-variant mb-2">지자체와 계약하면 취약계층이 무료로 온다 서비스를 이용하고, 지자체가 대납합니다.</p>
-            {govContracts.length === 0 ? <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">등록된 지자체 계약이 없습니다</div>
+            <p className="text-sm text-on-surface-variant mb-2">{t('govDesc')}</p>
+            {govContracts.length === 0 ? <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">{t('noGov')}</div>
             : govContracts.map((g: any) => (
               <div key={g.id} className="bg-surface-card rounded-card p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -254,15 +254,15 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="bg-surface-low rounded-lg p-2">
                     <div className="font-bold text-primary">{(g.budget / 10000).toLocaleString()}만원</div>
-                    <div className="text-on-surface-variant">예산</div>
+                    <div className="text-on-surface-variant">{t('budget')}</div>
                   </div>
                   <div className="bg-surface-low rounded-lg p-2">
-                    <div className="font-bold text-orange-grade">{(g.spent / 10000).toLocaleString()}만원</div>
-                    <div className="text-on-surface-variant">사용</div>
+                    <div className="font-bold text-orange-grade">{(g.spent / 10000).toLocaleString()}</div>
+                    <div className="text-on-surface-variant">{t('spent')}</div>
                   </div>
                   <div className="bg-surface-low rounded-lg p-2">
                     <div className="font-bold">{g.used_requests_month}/{g.max_requests_month}</div>
-                    <div className="text-on-surface-variant">이번달</div>
+                    <div className="text-on-surface-variant">{t('thisMonth')}</div>
                   </div>
                 </div>
                 <StatusBadge status={g.status} />
@@ -274,8 +274,8 @@ export default function AdminDashboard() {
         {/* Sponsors */}
         {tab === 'sponsors' && (
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-on-surface-variant mb-2">기업 CSR 예산으로 지역 긴급 돌봄을 후원합니다.</p>
-            {sponsors.length === 0 ? <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">등록된 스폰서가 없습니다</div>
+            <p className="text-sm text-on-surface-variant mb-2">{t('sponsorDesc')}</p>
+            {sponsors.length === 0 ? <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">{t('noSponsors')}</div>
             : sponsors.map((s: any) => (
               <div key={s.id} className="bg-surface-card rounded-card p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -286,7 +286,7 @@ export default function AdminDashboard() {
                 <div className="flex gap-2 text-center text-xs">
                   <div className="flex-1 bg-surface-low rounded-lg p-2">
                     <div className="font-bold text-primary">{(s.budget / 10000).toLocaleString()}만원</div>
-                    <div className="text-on-surface-variant">후원 예산</div>
+                    <div className="text-on-surface-variant">{t('sponsorBudget')}</div>
                   </div>
                   <div className="flex-1 bg-surface-low rounded-lg p-2">
                     <div className="font-bold text-orange-grade">{(s.spent / 10000).toLocaleString()}만원</div>
@@ -299,12 +299,12 @@ export default function AdminDashboard() {
             {/* Impact (KBS marketing data) */}
             {impact?.stats && (
               <div className="bg-surface-card rounded-card p-5 mt-4">
-                <h3 className="font-display font-bold mb-3">온다 임팩트 (KBS 마케팅용)</h3>
+                <h3 className="font-display font-bold mb-3">{t('impactTitle')}</h3>
                 <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.completedCare}</div>돌봄 완료</div>
-                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.verifiedHelpers}</div>검증 출동자</div>
-                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.averageRating}</div>평균 평점</div>
-                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.govPartnerships + impact.stats.corporateSponsors}</div>파트너</div>
+                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.completedCare}</div>{t('completedCare')}</div>
+                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.verifiedHelpers}</div>{t('verifiedHelpers')}</div>
+                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.averageRating}</div>{t('avgRating')}</div>
+                  <div className="bg-surface-low rounded-lg p-2"><div className="font-bold text-lg">{impact.stats.govPartnerships + impact.stats.corporateSponsors}</div>{t('partners')}</div>
                 </div>
                 <p className="text-[10px] text-on-surface-variant mt-2 text-center">
                   API: onda-backend.pensive-kim.workers.dev/api/public/impact

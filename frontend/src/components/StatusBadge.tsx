@@ -1,3 +1,5 @@
+import { useLang } from '../i18n';
+
 const STYLES: Record<string, string> = {
   pending: 'bg-surface-high text-on-surface-variant',
   matched: 'bg-secondary-container text-secondary',
@@ -9,22 +11,32 @@ const STYLES: Record<string, string> = {
   completed: 'bg-trust-green-bg text-trust-green',
   cancelled: 'bg-error-container text-error',
   rejected: 'bg-error-container text-error',
+  expired: 'bg-error-container text-error',
   approved: 'bg-trust-green-bg text-trust-green',
   suspended: 'bg-error-container text-error',
   paid: 'bg-trust-green-bg text-trust-green',
+  wallet_paid: 'bg-trust-green-bg text-trust-green',
+  gov_covered: 'bg-secondary-container text-secondary',
+  sponsor_covered: 'bg-secondary-container text-secondary',
+  active: 'bg-trust-green-bg text-trust-green',
 };
 
-const LABELS: Record<string, string> = {
-  pending: '대기중', matched: '매칭됨', accepted: '수락', offered: '제안됨',
-  moving: '이동중', arrived: '도착', in_progress: '돌봄중', completed: '완료',
-  cancelled: '취소됨', rejected: '거절', approved: '승인됨', suspended: '정지',
-  paid: '지급완료',
+// Status → i18n key mapping
+const STATUS_KEYS: Record<string, string> = {
+  pending: 'stepMatching', matched: 'stepAccepted', accepted: 'stepAccepted', offered: 'stepMatching',
+  moving: 'stepMoving', arrived: 'stepArrived', in_progress: 'stepCaring', completed: 'stepDone',
+  cancelled: 'reject', rejected: 'reject', expired: 'reject',
+  approved: 'approve', suspended: 'suspendAction', paid: 'stepDone',
+  wallet_paid: 'stepDone', gov_covered: 'stepDone', sponsor_covered: 'stepDone', active: 'approve',
 };
 
 export default function StatusBadge({ status }: { status: string }) {
+  const { t } = useLang();
+  const key = STATUS_KEYS[status];
+  const label = key ? t(key as any) : status;
   return (
     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${STYLES[status] || STYLES.pending}`}>
-      {LABELS[status] || status}
+      {label}
     </span>
   );
 }
