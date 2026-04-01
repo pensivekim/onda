@@ -76,14 +76,13 @@ export default function RequestStatus() {
         {match && ['accepted','moving','arrived','in_progress'].includes(match.status) && (
           <div className="mt-4 flex gap-3">
             <a href="tel:112" className="flex-1 py-3 bg-error text-white rounded-xl font-bold text-center text-sm">
-              🚨 긴급 112
+              🚨 {t('sos112')}
             </a>
             <button onClick={async () => {
               const d = await api.get(`/api/dispatch/${id}/responder-location`, token!);
-              if (d.available) alert(`출동자 위치: ${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}`);
-              else alert('출동자 위치를 확인할 수 없습니다');
+              if (d.available) alert(`${t('sosResponderLoc')}: ${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}`);
             }} className="flex-1 py-3 bg-secondary-container text-secondary rounded-xl font-bold text-sm">
-              📍 출동자 위치
+              📍 {t('sosResponderLoc')}
             </button>
           </div>
         )}

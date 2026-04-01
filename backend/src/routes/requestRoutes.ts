@@ -58,4 +58,37 @@ app.delete("/api/requests/:id", requireAuth(), async (c) => {
   return c.json({ ok: true });
 });
 
+// ===== User Address Management =====
+
+// GET /api/users/profile — 내 프로필 (주소 포함)
+app.get("/api/users/profile", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const profile = await c.env.DB.prepare("SELECT id, name, phone, email, address, lat, lng, region, lang FROM onda_users WHERE id = ?").bind(user.id).first();
+  return c.json({ profile });
+});
+
+// PATCH /api/users/address — 주소 등록/수정
+app.patch("/api/users/address", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const body = await c.req.json<{ address: string; lat?: number; lng?: number }>();
+  if (!body.address) return c.json({ error: "address required" }, 400);
+
+  await c.env.DB.prepare("UPDATE onda_users SET address = ?, lat = ?, lng = ? WHERE id = ?")
+    .bind(body.address, body.lat || 0, body.lng || 0, user.id).run();
+
+  return c.json({ ok: true });
+});
+
+// PATCH /api/users/region — 지역 변경
+app.patch("/api/users/region", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const { region } = await c.req.json<{ region: string }>();
+  if (!region) return c.json({ error: "region required" }, 400);
+  await c.env.DB.prepare("UPDATE onda_users SET region = ? WHERE id = ?").bind(region, user.id).run();
+  return c.json({ ok: true });
+});
+
 export { app as requestRoutes };

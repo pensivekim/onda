@@ -15,5 +15,8 @@ id = "808d3d09a4754653973f0e060cbc8edc"
 binding = "CERT_BUCKET"
 bucket_name = "onda-certs"
 
+[triggers]
+crons = ["* * * * *"]
+
 [vars]
 FRONTEND_URL = "https://onda.genomic.cc"

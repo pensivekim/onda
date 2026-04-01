@@ -22,7 +22,7 @@ export default function MatchDetail() {
     in_progress: { label: t('completeCare'), next: 'completed' },
   };
 
-  const load = () => { if (token && id) api.get(`/api/dispatch/${id}/status`, token).then((d: any) => { if (d.activeMatch) setMatch(d.activeMatch); }); };
+  const load = () => { if (token && id) api.get(`/api/matches/${id}`, token).then((d: any) => { if (d.match) setMatch(d.match); }); };
   useEffect(() => { load(); }, [id, token]);
 
   useEffect(() => {

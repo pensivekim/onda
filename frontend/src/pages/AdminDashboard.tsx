@@ -25,6 +25,7 @@ export default function AdminDashboard() {
   const [sponsors, setSponsors] = useState<any[]>([]);
   const [complaints, setComplaints] = useState<any[]>([]);
   const [warnedResponders, setWarnedResponders] = useState<any[]>([]);
+  const [verificationList, setVerificationList] = useState<any[]>([]);
   const [impact, setImpact] = useState<any>(null);
 
   const load = () => {
@@ -38,6 +39,7 @@ export default function AdminDashboard() {
     api.get('/api/admin/sponsors', token).then((d: any) => setSponsors(d.sponsors || []));
     api.get('/api/admin/complaints?status=pending', token).then((d: any) => setComplaints(d.complaints || []));
     api.get('/api/admin/responders/warned', token).then((d: any) => setWarnedResponders(d.responders || []));
+    api.get('/api/admin/responders/verification-status', token).then((d: any) => setVerificationList(d.responders || []));
     api.get('/api/public/impact').then(setImpact);
   };
   useEffect(() => { load(); }, [token]);
@@ -45,6 +47,7 @@ export default function AdminDashboard() {
   const approve = async (id: string) => { await api.patch(`/api/admin/responders/${id}/approve`, {}, token!); load(); };
   const suspendR = async (id: string) => { await api.patch(`/api/admin/responders/${id}/suspend`, {}, token!); load(); };
   const pay = async (id: string) => { await api.patch(`/api/admin/settlements/${id}/pay`, {}, token!); load(); };
+  const completeInterview = async (id: string) => { await api.patch(`/api/admin/responders/${id}/interview-complete`, {}, token!); load(); };
   const resolveComplaint = async (id: string, action: string) => { await api.patch(`/api/admin/complaints/${id}/resolve`, { action }, token!); load(); };
   const reinstateResponder = async (id: string) => { await api.patch(`/api/admin/responders/${id}/reinstate`, {}, token!); load(); };
   const verifyLicense = async (id: string) => { await api.patch(`/api/admin/licenses/${id}/verify`, {}, token!); load(); };
@@ -117,6 +120,27 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+
+            {/* Interview scheduled list */}
+            {(() => {
+              const interviews = verificationList.filter((r: any) => r.interview_status === 'scheduled');
+              if (!interviews.length) return null;
+              return <>
+                <h3 className="font-display font-bold mt-4 text-sm">{t('lang') === 'ko' ? '화상 인터뷰 예정' : 'Scheduled Interviews'} ({interviews.length})</h3>
+                {interviews.map((r: any) => (
+                  <div key={r.user_id} className="bg-surface-card rounded-card p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sm">{r.name}</span>
+                      <span className="text-xs text-secondary">{new Date(r.interview_scheduled_at).toLocaleString()}</span>
+                    </div>
+                    <button onClick={() => completeInterview(r.user_id)}
+                      className="mt-2 w-full py-2 bg-trust-green text-white rounded-xl text-xs font-bold">
+                      {t('lang') === 'ko' ? '인터뷰 완료' : 'Interview Complete'}
+                    </button>
+                  </div>
+                ))}
+              </>;
+            })()}
           </div>
         )}
 

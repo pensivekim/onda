@@ -9,7 +9,9 @@ async function request(method: string, path: string, body?: unknown, token?: str
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  return res.json();
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok && !data.error) data.error = `HTTP ${res.status}`;
+  return data;
 }
 
 export const api = {

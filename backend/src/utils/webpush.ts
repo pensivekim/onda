@@ -1,60 +1,37 @@
-// Web Push using raw crypto (no node modules, Workers compatible)
+// Notification system — D1-based polling (Workers compatible, no RFC 8291 needed)
+// Pattern: server inserts notification → client polls → shows via Notification API
 
-interface PushSubscription {
-  endpoint: string;
-  keys: { p256dh: string; auth: string };
-}
-
-interface PushPayload {
-  title: string;
-  body: string;
-  url?: string;
-  tag?: string;
-  urgent?: boolean;
-}
-
-// Send push notification via Web Push protocol
-export async function sendWebPush(
-  subscription: PushSubscription,
-  payload: PushPayload,
-  vapidPublicKey: string,
-  vapidPrivateKey: string
-): Promise<boolean> {
-  try {
-    // For MVP: use fetch to subscription endpoint with payload
-    // Full Web Push encryption is complex in Workers — use simple payload via fetch
-    const res = await fetch(subscription.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'TTL': '86400',
-      },
-      body: JSON.stringify(payload),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-// Store/retrieve subscriptions from D1
-export async function saveSubscription(db: D1Database, userId: string, subscription: PushSubscription): Promise<void> {
-  await db.prepare(`CREATE TABLE IF NOT EXISTS onda_push_subscriptions (
-    user_id TEXT PRIMARY KEY,
-    endpoint TEXT NOT NULL,
-    p256dh TEXT NOT NULL,
-    auth TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  )`).run();
-
+export async function sendNotification(
+  db: D1Database,
+  userId: string,
+  title: string,
+  body: string,
+  type: string = 'general',
+  urgent: boolean = false
+): Promise<void> {
   await db.prepare(
-    "INSERT INTO onda_push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET endpoint=?, p256dh=?, auth=?, created_at=datetime('now')"
-  ).bind(userId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth).run();
+    "INSERT INTO onda_notifications (user_id, type, title, body) VALUES (?, ?, ?, ?)"
+  ).bind(userId, type, title, body).run();
 }
 
-export async function getSubscription(db: D1Database, userId: string): Promise<PushSubscription | null> {
-  const row = await db.prepare("SELECT endpoint, p256dh, auth FROM onda_push_subscriptions WHERE user_id = ?")
-    .bind(userId).first<{ endpoint: string; p256dh: string; auth: string }>();
-  if (!row) return null;
-  return { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } };
+// Get unread notifications for a user
+export async function getUnreadNotifications(
+  db: D1Database,
+  userId: string,
+  limit: number = 10
+): Promise<any[]> {
+  const result = await db.prepare(
+    "SELECT id, type, title, body, created_at FROM onda_notifications WHERE user_id = ? AND read = 0 ORDER BY created_at DESC LIMIT ?"
+  ).bind(userId, limit).all();
+  return result.results;
+}
+
+// Mark notifications as read
+export async function markNotificationsRead(
+  db: D1Database,
+  ids: number[]
+): Promise<void> {
+  if (!ids.length) return;
+  const placeholders = ids.map(() => '?').join(',');
+  await db.prepare(`UPDATE onda_notifications SET read = 1 WHERE id IN (${placeholders})`).bind(...ids).run();
 }

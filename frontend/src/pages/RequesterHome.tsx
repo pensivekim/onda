@@ -31,11 +31,11 @@ export default function RequesterHome() {
         {balance !== null && (
           <Link to="/wallet" className="block bg-surface-card rounded-card p-4 mb-8 flex items-center justify-between">
             <div>
-              <span className="text-xs text-on-surface-variant">예치금 잔액</span>
-              <p className="font-display font-bold text-lg">{balance.toLocaleString()}원</p>
+              <span className="text-xs text-on-surface-variant">{t('walletBalance')}</span>
+              <p className="font-display font-bold text-lg">{balance.toLocaleString()}</p>
             </div>
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${balance <= 10000 ? 'bg-error-container text-error' : 'bg-trust-green-bg text-trust-green'}`}>
-              {balance <= 10000 ? '충전 필요' : '충분'}
+              {balance <= 10000 ? t('walletLow') : t('walletOk')}
             </span>
           </Link>
         )}

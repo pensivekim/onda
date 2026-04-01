@@ -120,6 +120,21 @@ app.get("/api/responders/me", requireAuth(), async (c) => {
   return c.json({ responder });
 });
 
+// GET /api/matches/:id — 매치 상세 (by match ID)
+app.get("/api/matches/:id", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const matchId = c.req.param("id");
+  const match = await c.env.DB.prepare(
+    `SELECT m.*, r.address, r.description, r.type, r.urgency, u.name as requester_name
+     FROM onda_matches m
+     JOIN onda_requests r ON r.id = m.request_id
+     LEFT JOIN onda_users u ON u.id = r.requester_id
+     WHERE m.id = ?`
+  ).bind(matchId).first();
+  if (!match) return c.json({ error: "Match not found" }, 404);
+  return c.json({ match });
+});
+
 // GET /api/matches/offered — 내게 제안된 매치 목록
 app.get("/api/matches/offered", requireAuth(), async (c) => {
   await ensureAllTables(c.env.DB);

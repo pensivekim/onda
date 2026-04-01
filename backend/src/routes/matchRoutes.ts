@@ -83,7 +83,10 @@ app.post("/api/dispatch/create", requireAuth(), async (c) => {
         "INSERT INTO onda_matches (id, request_id, responder_id, status) VALUES (?, ?, ?, 'offered')"
       ).bind(matchId, requestId, r.user_id).run();
 
-      // TODO: Send push notification to responder
+      // Send notification to responder
+      await c.env.DB.prepare(
+        "INSERT INTO onda_notifications (user_id, type, title, body) VALUES (?, 'match_offer', ?, ?)"
+      ).bind(r.user_id, "New care request nearby", `${body.type || 'care'} request at ${body.address || 'nearby'}. Tap to accept.`).run();
       candidateCount++;
     }
   }

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api';
+import { useLang } from '../i18n';
 
 export default function ReviewPanel({ matchId }: { matchId: string }) {
   const { token } = useAuth();
+  const { t } = useLang();
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -26,29 +28,24 @@ export default function ReviewPanel({ matchId }: { matchId: string }) {
     return (
       <div className="bg-trust-green-bg rounded-card p-5 text-center">
         <span className="text-2xl">{'★'.repeat(rating)}{'☆'.repeat(5 - rating)}</span>
-        <p className="text-sm text-trust-green font-medium mt-1">{submitted ? '리뷰가 등록되었습니다' : '이미 리뷰를 작성하셨습니다'}</p>
+        <p className="text-sm text-trust-green font-medium mt-1">{submitted ? t('reviewDone') : t('reviewExists')}</p>
       </div>
     );
   }
 
   return (
     <div className="bg-surface-card rounded-card p-5">
-      <h3 className="font-display font-bold text-sm mb-3">돌봄은 어떠셨나요?</h3>
+      <h3 className="font-display font-bold text-sm mb-3">{t('reviewTitle')}</h3>
       <div className="flex gap-1 justify-center mb-3">
         {[1,2,3,4,5].map(n => (
           <button key={n} onClick={() => setRating(n)}
-            className={`text-3xl transition ${n <= rating ? 'text-primary' : 'text-surface-high'}`}>
-            ★
-          </button>
+            className={`text-3xl transition ${n <= rating ? 'text-primary' : 'text-surface-high'}`}>★</button>
         ))}
       </div>
       <textarea value={comment} onChange={e => setComment(e.target.value)}
-        placeholder="한마디 남겨주세요 (선택)" rows={2}
+        placeholder={t('reviewPlaceholder')} rows={2}
         className="w-full p-3 rounded-xl bg-surface-low text-on-surface text-sm outline-none resize-none mb-3"/>
-      <button onClick={submit}
-        className="w-full py-3 rounded-xl bg-primary text-on-primary font-bold text-sm">
-        리뷰 등록
-      </button>
+      <button onClick={submit} className="w-full py-3 rounded-xl bg-primary text-on-primary font-bold text-sm">{t('reviewSubmit')}</button>
     </div>
   );
 }

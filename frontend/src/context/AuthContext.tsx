@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { api } from '../api';
 
 interface User { id: string; name: string; role: string; }
@@ -6,22 +6,42 @@ interface AuthCtx { user: User | null; token: string | null; login: (t: string, 
 
 const AuthContext = createContext<AuthCtx>({ user: null, token: null, login: () => {}, logout: () => {}, loading: true });
 
-// Push subscription
-async function initPush(token: string) {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+// Poll notifications + show via Notification API
+function startNotificationPolling(token: string) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') Notification.requestPermission();
+
+  setInterval(async () => {
+    try {
+      const d = await api.get('/api/notifications/pending', token);
+      if (!d.notifications?.length) return;
+      const ids: number[] = [];
+      for (const n of d.notifications) {
+        ids.push(n.id);
+        if (Notification.permission === 'granted') {
+          new Notification(n.title, { body: n.body, tag: `onda-${n.id}` });
+        }
+      }
+      if (ids.length) api.post('/api/notifications/read', { ids }, token).catch(() => {});
+    } catch {}
+  }, 10000); // Poll every 10 seconds
+}
+
+// Auto-refresh token before expiry
+async function refreshTokenIfNeeded(token: string, setToken: (t: string) => void) {
   try {
-    const reg = await navigator.serviceWorker.register('/sw-push.js');
-    const existing = await reg.pushManager.getSubscription();
-    if (existing) return; // already subscribed
-
-    const keyRes = await api.get('/api/push/vapid-key');
-    if (!keyRes.publicKey) return;
-
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: keyRes.publicKey,
-    });
-    await api.post('/api/push/subscribe', { subscription: sub.toJSON() }, token);
+    // Decode JWT payload to check exp
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiresIn = (payload.exp * 1000) - Date.now();
+    // Refresh if less than 2 hours remaining
+    if (expiresIn > 2 * 3600000) return;
+    const refreshToken = localStorage.getItem('onda_refresh_token');
+    if (!refreshToken) return;
+    const d = await api.post('/api/auth/refresh', { refreshToken });
+    if (d.token) {
+      localStorage.setItem('onda_token', d.token);
+      setToken(d.token);
+    }
   } catch {}
 }
 
@@ -29,17 +49,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('onda_token'));
   const [loading, setLoading] = useState(true);
+  const pollingStarted = useRef(false);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
     api.post('/api/auth/verify', { token }).then((d: any) => {
       if (d.valid) {
         setUser({ id: d.userId, name: d.name, role: d.role });
-        // Init push after login verified
-        setTimeout(() => initPush(token), 3000);
+        // Start notification polling (once)
+        if (!pollingStarted.current) {
+          pollingStarted.current = true;
+          startNotificationPolling(token);
+        }
+        // Auto-refresh token
+        refreshTokenIfNeeded(token, setToken);
+      } else {
+        localStorage.removeItem('onda_token');
+        setToken(null);
       }
-      else { localStorage.removeItem('onda_token'); setToken(null); }
     }).catch(() => {}).finally(() => setLoading(false));
+  }, [token]);
+
+  // Periodic token refresh check (every 30 min)
+  useEffect(() => {
+    if (!token) return;
+    const iv = setInterval(() => refreshTokenIfNeeded(token, setToken), 30 * 60000);
+    return () => clearInterval(iv);
   }, [token]);
 
   const login = (t: string, rt: string) => {

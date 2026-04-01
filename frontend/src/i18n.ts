@@ -125,6 +125,30 @@ const ko = {
   fee: '수수료',
   total: '총액',
   managing: '담당',
+  // Wallet
+  walletBalance: '예치금 잔액',
+  walletCharge: '예치금 충전',
+  walletLow: '충전 필요',
+  walletOk: '충분',
+  walletHistory: '거래 내역',
+  walletNoHistory: '거래 내역이 없습니다',
+  walletBankInfo: '계좌이체 안내',
+  chargeBtn: '충전하기',
+  charging: '처리 중...',
+  // Chat
+  chatTitle: '채팅',
+  chatEmpty: '메시지가 없습니다',
+  chatPlaceholder: '메시지 입력...',
+  chatSend: '전송',
+  // Review
+  reviewTitle: '돌봄은 어떠셨나요?',
+  reviewPlaceholder: '한마디 남겨주세요 (선택)',
+  reviewSubmit: '리뷰 등록',
+  reviewDone: '리뷰가 등록되었습니다',
+  reviewExists: '이미 리뷰를 작성하셨습니다',
+  // SOS
+  sos112: '긴급 112',
+  sosResponderLoc: '출동자 위치',
 };
 
 const en: Strings = {
@@ -167,6 +191,13 @@ const en: Strings = {
   requestsToday: 'Today Requests', completedToday: 'Completed Today',
   noPending: 'No pending helpers', approve: 'Approve', suspend: 'Reject',
   noSettlements: 'No pending settlements', payBtn: 'Process Payment', fee: 'Fee', total: 'Total', managing: 'managing',
+  walletBalance: 'Wallet Balance', walletCharge: 'Charge Wallet', walletLow: 'Low', walletOk: 'OK',
+  walletHistory: 'Transactions', walletNoHistory: 'No transactions yet', walletBankInfo: 'Bank Transfer Info',
+  chargeBtn: 'Charge', charging: 'Processing...',
+  chatTitle: 'Chat', chatEmpty: 'No messages', chatPlaceholder: 'Type a message...', chatSend: 'Send',
+  reviewTitle: 'How was the care?', reviewPlaceholder: 'Leave a comment (optional)', reviewSubmit: 'Submit Review',
+  reviewDone: 'Review submitted', reviewExists: 'Already reviewed',
+  sos112: 'Emergency 112', sosResponderLoc: 'Helper Location',
 };
 
 const ja: Strings = {

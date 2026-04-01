@@ -1,43 +1,36 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { requireAuth, getUser } from "../utils/auth";
-import { saveSubscription, getSubscription } from "../utils/webpush";
+import { getUnreadNotifications, markNotificationsRead } from "../utils/webpush";
+import { ensureAllTables } from "../utils/db";
 
 const app = new Hono<{ Bindings: Env }>();
 
-// POST /api/push/subscribe — 푸시 구독 등록
-app.post("/api/push/subscribe", requireAuth(), async (c) => {
+// GET /api/notifications/pending — 미읽은 알림 (클라이언트 폴링)
+app.get("/api/notifications/pending", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
   const user = getUser(c);
-  const body = await c.req.json<{ subscription: { endpoint: string; keys: { p256dh: string; auth: string } } }>();
-  if (!body.subscription?.endpoint) return c.json({ error: "subscription required" }, 400);
-  await saveSubscription(c.env.DB, user.id, body.subscription);
+  const notifications = await getUnreadNotifications(c.env.DB, user.id);
+  return c.json({ notifications });
+});
+
+// POST /api/notifications/read — 알림 읽음 처리
+app.post("/api/notifications/read", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const { ids } = await c.req.json<{ ids: number[] }>();
+  if (!ids?.length) return c.json({ error: "ids required" }, 400);
+  await markNotificationsRead(c.env.DB, ids);
   return c.json({ ok: true });
 });
 
-// GET /api/push/vapid-key — VAPID public key 반환
-app.get("/api/push/vapid-key", (c) => {
-  return c.json({ publicKey: c.env.VAPID_PUBLIC_KEY || "" });
-});
-
-// POST /api/push/send — 특정 사용자에게 푸시 발송 (admin only)
-app.post("/api/push/send", requireAuth(), async (c) => {
-  const body = await c.req.json<{ userId: string; title: string; body: string; url?: string; urgent?: boolean }>();
-  if (!body.userId || !body.title) return c.json({ error: "userId and title required" }, 400);
-
-  const sub = await getSubscription(c.env.DB, body.userId);
-  if (!sub) return c.json({ error: "No subscription found" }, 404);
-
-  // Send push
-  try {
-    const res = await fetch(sub.endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "TTL": "86400" },
-      body: JSON.stringify({ title: body.title, body: body.body, url: body.url, urgent: body.urgent }),
-    });
-    return c.json({ ok: true, sent: res.ok });
-  } catch {
-    return c.json({ ok: false, error: "Push failed" }, 500);
-  }
+// GET /api/notifications/history — 알림 히스토리
+app.get("/api/notifications/history", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const result = await c.env.DB.prepare(
+    "SELECT * FROM onda_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
+  ).bind(user.id).all();
+  return c.json({ notifications: result.results });
 });
 
 export { app as pushRoutes };
