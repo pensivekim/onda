@@ -84,6 +84,13 @@ app.get("/api/admin/stats", requireAdmin(), async (c) => {
     c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_matches WHERE status = 'completed' AND completed_at >= ?").bind(today).first<{ cnt: number }>(),
   ]);
 
+  // Match rate + avg arrival time
+  const [totalReqs, completedReqs, avgArrival] = await Promise.all([
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_requests").first<{ cnt: number }>(),
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_requests WHERE status = 'completed'").first<{ cnt: number }>(),
+    c.env.DB.prepare("SELECT AVG((julianday(arrived_at) - julianday(accepted_at)) * 1440) as avg_min FROM onda_matches WHERE arrived_at IS NOT NULL AND accepted_at IS NOT NULL").first<{ avg_min: number }>(),
+  ]);
+
   // Safety stats
   const [warned, suspended, pendingComplaints, interviewPending] = await Promise.all([
     c.env.DB.prepare("SELECT COUNT(*) as cnt FROM onda_responders WHERE warning_count > 0").first<{ cnt: number }>().catch(() => ({ cnt: 0 })),
@@ -98,6 +105,8 @@ app.get("/api/admin/stats", requireAdmin(), async (c) => {
     pendingResponders: pendingResp?.cnt || 0,
     requestsToday: requestsToday?.cnt || 0,
     completedToday: matchesToday?.cnt || 0,
+    matchRate: totalReqs?.cnt ? Math.round(((completedReqs?.cnt || 0) / totalReqs.cnt) * 100) : 0,
+    avgArrivalMin: avgArrival?.avg_min ? Math.round(avgArrival.avg_min) : 0,
     warnedResponders: (warned as any)?.cnt || 0,
     suspendedResponders: (suspended as any)?.cnt || 0,
     pendingComplaints: (pendingComplaints as any)?.cnt || 0,

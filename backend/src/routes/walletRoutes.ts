@@ -66,8 +66,8 @@ app.post("/api/wallet/charge", requireAuth(), async (c) => {
   });
 });
 
-// POST /api/wallet/deduct — 돌봄 완료 시 자동 차감 (내부 호출용)
-app.post("/api/wallet/deduct", async (c) => {
+// POST /api/wallet/deduct — 돌봄 완료 시 자동 차감 (admin 전용)
+app.post("/api/wallet/deduct", requireAdmin(), async (c) => {
   await ensureAllTables(c.env.DB);
   const body = await c.req.json<{ userId: string; amount: number; matchId: string; memo?: string }>();
   if (!body.userId || !body.amount || !body.matchId) return c.json({ error: "userId, amount, matchId required" }, 400);

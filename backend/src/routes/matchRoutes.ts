@@ -38,7 +38,7 @@ app.post("/api/dispatch/create", requireAuth(), async (c) => {
   const user = getUser(c);
   const body = await c.req.json<{
     type?: string; address?: string; lat?: number; lng?: number;
-    description?: string; urgency?: string; source?: string; region?: string;
+    description?: string; urgency?: string; source?: string; region?: string; gradeRequired?: string;
   }>();
 
   const reqLat = body.lat || 0;
@@ -50,17 +50,19 @@ app.post("/api/dispatch/create", requireAuth(), async (c) => {
   const region = body.region || userRow?.region || 'KR';
   const regionConfig = getRegion(region);
 
-  // 1. Create request with region
+  const gradeRequired = body.gradeRequired || 'green';
+
+  // 1. Create request with region + grade
   await c.env.DB.prepare(
-    `INSERT INTO onda_requests (id, requester_id, type, address, lat, lng, description, urgency, source, region)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO onda_requests (id, requester_id, type, address, lat, lng, description, urgency, source, region, grade_required)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     requestId, user.id, body.type || "child", body.address || "",
-    reqLat, reqLng, body.description || "", body.urgency || "normal", body.source || "manual", region
+    reqLat, reqLng, body.description || "", body.urgency || "normal", body.source || "manual", region, gradeRequired
   ).run();
 
-  // 2. Find available responders nearby — same region only
-  const gradeFilter = "";
+  // 2. Find available responders nearby — same region + grade filter
+  const gradeFilter = gradeRequired === 'red' ? "AND r.grade = 'red'" : gradeRequired === 'orange' ? "AND r.grade IN ('orange','red')" : "";
   const approvedResponders = await c.env.DB.prepare(
     `SELECT r.user_id, r.grade FROM onda_responders r
      JOIN onda_users u ON u.id = r.user_id
@@ -153,7 +155,7 @@ app.post("/api/dispatch/webhook", async (c) => {
       const locStr = await c.env.LOCATION_KV.get(`loc:${r.user_id}`);
       if (!locStr) continue;
       const [lat, lng] = locStr.split(",").map(Number);
-      if (haversine(reqLat, reqLng, lat, lng) <= MATCH_RADIUS_KM) {
+      if (haversine(reqLat, reqLng, lat, lng) <= 5) { // webhook default 5km
         await c.env.DB.prepare(
           "INSERT INTO onda_matches (id, request_id, responder_id, status) VALUES (?, ?, ?, 'offered')"
         ).bind(crypto.randomUUID(), requestId, r.user_id).run();

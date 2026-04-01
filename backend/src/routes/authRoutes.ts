@@ -299,7 +299,7 @@ app.post("/api/auth/register", async (c) => {
   try { await c.env.DB.prepare("ALTER TABLE onda_users ADD COLUMN password_hash TEXT").run(); } catch {}
 
   await c.env.DB.prepare(
-    "INSERT INTO onda_users (id, email, name, role, password_hash) VALUES (?, ?, ?, 'admin', ?)"
+    "INSERT INTO onda_users (id, email, name, role, password_hash) VALUES (?, ?, ?, 'requester', ?)"
   ).bind(userId, email.toLowerCase().trim(), name, passwordHash).run();
 
   return c.json({ ok: true, userId });

@@ -8,6 +8,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       name TEXT,
       phone TEXT,
       email TEXT,
+      password_hash TEXT,
       profile_image TEXT,
       role TEXT DEFAULT 'requester',
       address TEXT,
@@ -27,6 +28,13 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       rating REAL DEFAULT 0,
       total_done INTEGER DEFAULT 0,
       bio TEXT,
+      criminal_check_agreed INTEGER DEFAULT 0,
+      sex_offender_check_agreed INTEGER DEFAULT 0,
+      service_oath_agreed INTEGER DEFAULT 0,
+      interview_scheduled_at TEXT,
+      interview_status TEXT DEFAULT 'not_scheduled',
+      warning_count INTEGER DEFAULT 0,
+      suspended_reason TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS onda_requests (
@@ -100,6 +108,14 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       match_id TEXT NOT NULL,
       sender_id TEXT NOT NULL,
       content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
+    // Push subscriptions
+    db.prepare(`CREATE TABLE IF NOT EXISTS onda_push_subscriptions (
+      user_id TEXT PRIMARY KEY,
+      endpoint TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Complaints (민원)

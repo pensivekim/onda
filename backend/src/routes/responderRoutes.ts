@@ -120,6 +120,21 @@ app.get("/api/responders/me", requireAuth(), async (c) => {
   return c.json({ responder });
 });
 
+// GET /api/matches/offered — 내게 제안된 매치 목록
+app.get("/api/matches/offered", requireAuth(), async (c) => {
+  await ensureAllTables(c.env.DB);
+  const user = getUser(c);
+  const result = await c.env.DB.prepare(
+    `SELECT m.*, r.type, r.address, r.description, r.urgency, u.name as requester_name
+     FROM onda_matches m
+     JOIN onda_requests r ON r.id = m.request_id
+     LEFT JOIN onda_users u ON u.id = r.requester_id
+     WHERE m.responder_id = ? AND m.status IN ('offered','accepted','moving','arrived','in_progress')
+     ORDER BY m.created_at DESC LIMIT 10`
+  ).bind(user.id).all();
+  return c.json({ matches: result.results });
+});
+
 // POST /api/matches/:id/accept — 요청 수락
 app.post("/api/matches/:id/accept", requireAuth(), async (c) => {
   await ensureAllTables(c.env.DB);
@@ -163,25 +178,30 @@ app.patch("/api/matches/:id/status", requireAuth(), async (c) => {
   if (!match) return c.json({ error: "Match not found" }, 404);
 
   const now = new Date().toISOString();
-  const updates: string[] = [`status = '${status}'`];
 
-  if (status === "moving") updates.push(`arrived_at = NULL`);
-  if (status === "arrived") updates.push(`arrived_at = '${now}'`);
-  if (status === "in_progress") updates.push(`started_at = '${now}'`);
+  // Safe parameterized timestamp updates
+  if (status === "moving") {
+    await c.env.DB.prepare("UPDATE onda_matches SET status = 'moving' WHERE id = ?").bind(matchId).run();
+  }
+  if (status === "arrived") {
+    await c.env.DB.prepare("UPDATE onda_matches SET status = 'arrived', arrived_at = ? WHERE id = ?").bind(now, matchId).run();
+  }
+  if (status === "in_progress") {
+    await c.env.DB.prepare("UPDATE onda_matches SET status = 'in_progress', started_at = ? WHERE id = ?").bind(now, matchId).run();
+  }
   if (status === "completed") {
-    updates.push(`completed_at = '${now}'`);
     // Calculate duration and amount
     const startedAt = match.started_at as string;
     if (startedAt) {
       const mins = Math.max(1, Math.round((Date.now() - new Date(startedAt).getTime()) / 60000));
-      // Region-based hourly rate by grade
       const responder = await c.env.DB.prepare("SELECT grade FROM onda_responders WHERE user_id = ?").bind(user.id).first<{grade:string}>();
       const userRegion = await c.env.DB.prepare("SELECT region FROM onda_users WHERE id = ?").bind(user.id).first<{region:string}>();
       const regionConfig = getRegion(userRegion?.region || 'KR');
       const grade = responder?.grade || 'green';
       const hourlyRate = regionConfig.rates[grade as keyof typeof regionConfig.rates] || regionConfig.rates.green;
       const amount = Math.round((mins / 60) * hourlyRate);
-      updates.push(`duration_min = ${mins}`, `amount = ${amount}`);
+      await c.env.DB.prepare("UPDATE onda_matches SET status = 'completed', completed_at = ?, duration_min = ?, amount = ? WHERE id = ?")
+        .bind(now, mins, amount, matchId).run();
 
       // Create settlement
       const fee = Math.round(amount * regionConfig.feePercent / 100);
@@ -246,10 +266,11 @@ app.patch("/api/matches/:id/status", requireAuth(), async (c) => {
           await c.env.DB.prepare("UPDATE onda_settlements SET status = 'sponsor_covered' WHERE match_id = ?").bind(matchId).run();
         }
       }
+    } else {
+      await c.env.DB.prepare("UPDATE onda_matches SET status = 'completed', completed_at = ? WHERE id = ?").bind(now, matchId).run();
     }
   }
 
-  await c.env.DB.prepare(`UPDATE onda_matches SET ${updates.join(", ")} WHERE id = ?`).bind(matchId).run();
   return c.json({ ok: true, status });
 });
 

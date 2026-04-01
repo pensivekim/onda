@@ -19,8 +19,8 @@ app.get("/api/push/vapid-key", (c) => {
   return c.json({ publicKey: c.env.VAPID_PUBLIC_KEY || "" });
 });
 
-// POST /api/push/send — 특정 사용자에게 푸시 발송 (admin or system)
-app.post("/api/push/send", async (c) => {
+// POST /api/push/send — 특정 사용자에게 푸시 발송 (admin only)
+app.post("/api/push/send", requireAuth(), async (c) => {
   const body = await c.req.json<{ userId: string; title: string; body: string; url?: string; urgent?: boolean }>();
   if (!body.userId || !body.title) return c.json({ error: "userId and title required" }, 400);
 

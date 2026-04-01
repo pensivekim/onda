@@ -15,8 +15,12 @@ export default function ResponderHome() {
   const [registering, setRegistering] = useState(false);
   const watchRef = useRef<number | null>(null);
 
-  const load = () => { if (token) api.get('/api/responders/me', token).then((d: any) => { if (d.responder) setResponder(d.responder); }); };
-  useEffect(() => { load(); }, [token]);
+  const load = () => {
+    if (!token) return;
+    api.get('/api/responders/me', token).then((d: any) => { if (d.responder) setResponder(d.responder); });
+    api.get('/api/matches/offered', token).then((d: any) => setMatches(d.matches || []));
+  };
+  useEffect(() => { load(); const iv = setInterval(load, 5000); return () => clearInterval(iv); }, [token]);
 
   // Auto-send location when available
   useEffect(() => {
@@ -145,9 +149,31 @@ export default function ResponderHome() {
           </button>
         </div>
         <h2 className="font-display font-bold mb-3">{t('incomingRequests')}</h2>
-        <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">
-          {responder.available ? t('waitingRequests') : t('turnOnToReceive')}
-        </div>
+        {matches.length === 0 ? (
+          <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">
+            {responder.available ? t('waitingRequests') : t('turnOnToReceive')}
+          </div>
+        ) : matches.map((m: any) => (
+          <div key={m.id} className="bg-surface-card rounded-card p-4 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-sm">{m.requester_name || 'Requester'}</span>
+              <StatusBadge status={m.status} />
+            </div>
+            <p className="text-xs text-on-surface-variant">{m.address || m.description || '-'}</p>
+            {m.urgency === 'emergency' && <span className="text-xs bg-error-container text-error px-2 py-0.5 rounded-full mt-1 inline-block">Emergency</span>}
+            {m.status === 'offered' && (
+              <div className="flex gap-2 mt-3">
+                <button onClick={async () => { await api.post(`/api/matches/${m.id}/accept`, {}, token!); load(); }}
+                  className="flex-1 py-2.5 bg-primary text-on-primary rounded-xl font-bold text-sm">{t('accept')}</button>
+                <button onClick={async () => { await api.post(`/api/matches/${m.id}/reject`, {}, token!); load(); }}
+                  className="flex-1 py-2.5 bg-surface-high text-on-surface-variant rounded-xl font-bold text-sm">{t('reject')}</button>
+              </div>
+            )}
+            {['accepted','moving','arrived','in_progress'].includes(m.status) && (
+              <a href={`/responder/match/${m.id}`} className="block mt-3 text-center text-sm text-primary font-semibold">View Details</a>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
