@@ -4,29 +4,29 @@ import { api } from '../api';
 import NavBar from '../components/NavBar';
 import SOSButton from '../components/SOSButton';
 import StatusBadge from '../components/StatusBadge';
+import { useLang } from '../i18n';
 
 export default function RequesterHome() {
   const { user, token } = useAuth();
+  const { t } = useLang();
   const [requests, setRequests] = useState<any[]>([]);
 
   useEffect(() => {
     if (token) api.get('/api/requests/my', token).then((d: any) => setRequests(d.requests || []));
   }, [token]);
 
-  const TYPE_LABELS: Record<string, string> = { child: '아이 돌봄', elder: '어르신 돌봄', disabled: '장애인 돌봄', other: '기타' };
+  const TYPE_LABELS: Record<string, string> = { child: t('typeChild'), elder: t('typeElder'), disabled: t('typeDisabled'), other: t('typeOther') };
 
   return (
     <div className="min-h-screen">
       <NavBar />
       <div className="max-w-md mx-auto px-5 py-8">
-        <h1 className="font-display text-2xl font-bold mb-2">{user?.name}님, 안녕하세요</h1>
-        <p className="text-on-surface-variant text-sm mb-10">긴급 돌봄이 필요하면 아래 버튼을 눌러주세요.</p>
-
+        <h1 className="font-display text-2xl font-bold mb-2">{user?.name}{t('hello')}</h1>
+        <p className="text-on-surface-variant text-sm mb-10">{t('sosSub')}</p>
         <SOSButton />
-
-        <h2 className="font-display text-lg font-bold mt-12 mb-4">최근 요청</h2>
+        <h2 className="font-display text-lg font-bold mt-12 mb-4">{t('recentRequests')}</h2>
         {requests.length === 0 ? (
-          <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">아직 요청이 없습니다</div>
+          <div className="bg-surface-low rounded-card p-8 text-center text-on-surface-variant text-sm">{t('noRequests')}</div>
         ) : (
           <div className="flex flex-col gap-3">
             {requests.map((r: any) => (
