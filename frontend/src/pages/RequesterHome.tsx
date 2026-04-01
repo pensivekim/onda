@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api';
 import NavBar from '../components/NavBar';
@@ -10,9 +11,12 @@ export default function RequesterHome() {
   const { user, token } = useAuth();
   const { t } = useLang();
   const [requests, setRequests] = useState<any[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
 
   useEffect(() => {
-    if (token) api.get('/api/requests/my', token).then((d: any) => setRequests(d.requests || []));
+    if (!token) return;
+    api.get('/api/requests/my', token).then((d: any) => setRequests(d.requests || []));
+    api.get('/api/wallet/balance', token).then((d: any) => setBalance(d.balance || 0));
   }, [token]);
 
   const TYPE_LABELS: Record<string, string> = { child: t('typeChild'), elder: t('typeElder'), disabled: t('typeDisabled'), other: t('typeOther') };
@@ -23,6 +27,19 @@ export default function RequesterHome() {
       <div className="max-w-md mx-auto px-5 py-8">
         <h1 className="font-display text-2xl font-bold mb-2">{user?.name}{t('hello')}</h1>
         <p className="text-on-surface-variant text-sm mb-10">{t('sosSub')}</p>
+        {/* Wallet balance */}
+        {balance !== null && (
+          <Link to="/wallet" className="block bg-surface-card rounded-card p-4 mb-8 flex items-center justify-between">
+            <div>
+              <span className="text-xs text-on-surface-variant">예치금 잔액</span>
+              <p className="font-display font-bold text-lg">{balance.toLocaleString()}원</p>
+            </div>
+            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${balance <= 10000 ? 'bg-error-container text-error' : 'bg-trust-green-bg text-trust-green'}`}>
+              {balance <= 10000 ? '충전 필요' : '충분'}
+            </span>
+          </Link>
+        )}
+
         <SOSButton />
         <h2 className="font-display text-lg font-bold mt-12 mb-4">{t('recentRequests')}</h2>
         {requests.length === 0 ? (

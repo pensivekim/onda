@@ -9,6 +9,7 @@ import RequestStatus from './pages/RequestStatus';
 import ResponderHome from './pages/ResponderHome';
 import MatchDetail from './pages/MatchDetail';
 import AdminDashboard from './pages/AdminDashboard';
+import WalletPage from './pages/WalletPage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/requester/status/:id" element={<ProtectedRoute><RequestStatus /></ProtectedRoute>} />
           <Route path="/responder" element={<ProtectedRoute><ResponderHome /></ProtectedRoute>} />
           <Route path="/responder/match/:id" element={<ProtectedRoute><MatchDetail /></ProtectedRoute>} />
+          <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
           <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         </Routes>
       </AuthProvider>

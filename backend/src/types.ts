@@ -15,4 +15,5 @@ export interface Env {
   VAPID_PRIVATE_KEY: string;
   LINE_CHANNEL_ID: string;
   LINE_CHANNEL_SECRET: string;
+  PADDLE_WEBHOOK_SECRET: string;
 }

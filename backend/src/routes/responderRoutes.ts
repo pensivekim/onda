@@ -160,10 +160,33 @@ app.patch("/api/matches/:id/status", requireAuth(), async (c) => {
       updates.push(`duration_min = ${mins}`, `amount = ${amount}`);
 
       // Create settlement
-      const fee = Math.round(amount * 0.15); // 15% 수수료
+      const fee = Math.round(amount * regionConfig.feePercent / 100);
       await c.env.DB.prepare(
         "INSERT INTO onda_settlements (id, match_id, responder_id, amount, fee, net_amount) VALUES (?, ?, ?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), matchId, user.id, amount, fee, amount - fee).run();
+
+      // Auto-deduct from requester wallet
+      const request = await c.env.DB.prepare("SELECT requester_id FROM onda_requests WHERE id = ?")
+        .bind(match.request_id).first<{ requester_id: string }>();
+      if (request) {
+        const wallet = await c.env.DB.prepare("SELECT balance FROM onda_wallets WHERE user_id = ?")
+          .bind(request.requester_id).first<{ balance: number }>();
+        if (wallet && wallet.balance >= amount) {
+          await c.env.DB.prepare("UPDATE onda_wallets SET balance = balance - ?, updated_at = datetime('now') WHERE user_id = ?")
+            .bind(amount, request.requester_id).run();
+          await c.env.DB.prepare(
+            "INSERT INTO onda_wallet_transactions (id, user_id, type, amount, match_id, memo) VALUES (?, ?, 'deduct', ?, ?, ?)"
+          ).bind(crypto.randomUUID(), request.requester_id, -amount, matchId, `care:${grade}:${mins}min`).run();
+          // Mark settlement as wallet_paid
+          await c.env.DB.prepare("UPDATE onda_settlements SET status = 'wallet_paid' WHERE match_id = ?").bind(matchId).run();
+          // Low balance alert
+          if (wallet.balance - amount <= 10000) {
+            await c.env.DB.prepare(
+              "INSERT INTO onda_notifications (user_id, type, title, body) VALUES (?, 'low_balance', ?, ?)"
+            ).bind(request.requester_id, "Low Balance", `Balance: ${(wallet.balance - amount).toLocaleString()}. Please recharge.`).run();
+          }
+        }
+      }
     }
     // Update request status
     await c.env.DB.prepare("UPDATE onda_requests SET status = 'completed' WHERE id = ?").bind(match.request_id).run();
