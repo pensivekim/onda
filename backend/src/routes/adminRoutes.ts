@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { ensureAllTables } from "../utils/db";
 import { requireAdmin } from "../utils/auth";
+import { REGIONS, getRegion, formatCurrency } from "../utils/regions";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -265,6 +266,16 @@ app.get("/api/public/impact", async (c) => {
       red: { name: "Medical Professional", hourlyRate: 80000 },
     },
   });
+});
+
+// GET /api/public/regions — 활성 지역 목록 (글로벌 진입용)
+app.get("/api/public/regions", (c) => {
+  const regions = Object.values(REGIONS).filter(r => r.active).map(r => ({
+    code: r.code, name: r.name, currency: r.currency, currencySymbol: r.currencySymbol,
+    defaultLang: r.defaultLang, rates: r.rates, licenseTypes: r.licenseTypes.map(l => ({ id: l.id, name: l.name, grade: l.grade })),
+    authProviders: r.authProviders,
+  }));
+  return c.json({ regions });
 });
 
 // GET /api/public/sponsors — 공개 스폰서 목록 (랜딩 페이지 표시용)

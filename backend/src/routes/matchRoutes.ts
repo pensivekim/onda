@@ -3,10 +3,9 @@ import type { Env } from "../types";
 import { ensureAllTables } from "../utils/db";
 import { requireAuth, getUser } from "../utils/auth";
 import { haversine } from "../utils/geo";
+import { getRegion } from "../utils/regions";
 
 const app = new Hono<{ Bindings: Env }>();
-
-const MATCH_RADIUS_KM = 3;
 
 // POST /api/dispatch/create — 요청 생성 + 매칭 시작
 app.post("/api/dispatch/create", requireAuth(), async (c) => {
@@ -14,29 +13,34 @@ app.post("/api/dispatch/create", requireAuth(), async (c) => {
   const user = getUser(c);
   const body = await c.req.json<{
     type?: string; address?: string; lat?: number; lng?: number;
-    description?: string; urgency?: string; source?: string;
+    description?: string; urgency?: string; source?: string; region?: string;
   }>();
 
   const reqLat = body.lat || 0;
   const reqLng = body.lng || 0;
   const requestId = crypto.randomUUID();
 
-  // 1. Create request
+  // Determine region from user profile or body
+  const userRow = await c.env.DB.prepare("SELECT region FROM onda_users WHERE id = ?").bind(user.id).first<{ region: string }>();
+  const region = body.region || userRow?.region || 'KR';
+  const regionConfig = getRegion(region);
+
+  // 1. Create request with region
   await c.env.DB.prepare(
-    `INSERT INTO onda_requests (id, requester_id, type, address, lat, lng, description, urgency, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO onda_requests (id, requester_id, type, address, lat, lng, description, urgency, source, region)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     requestId, user.id, body.type || "child", body.address || "",
-    reqLat, reqLng, body.description || "", body.urgency || "normal", body.source || "manual"
+    reqLat, reqLng, body.description || "", body.urgency || "normal", body.source || "manual", region
   ).run();
 
-  // 2. Find available responders nearby (KV location scan)
-  // 등급 필터: green은 모든 요청, orange는 orange+green 요청, red는 모두
-  const gradeReq = body.type === 'elder' ? 'green' : 'green'; // 기본 green, 요청 시 지정 가능
-  const gradeFilter = gradeReq === 'orange' ? "AND grade IN ('orange','red')" : gradeReq === 'red' ? "AND grade = 'red'" : "";
+  // 2. Find available responders nearby — same region only
+  const gradeFilter = "";
   const approvedResponders = await c.env.DB.prepare(
-    `SELECT user_id, grade FROM onda_responders WHERE status = 'approved' AND available = 1 ${gradeFilter}`
-  ).bind().all<{ user_id: string; grade: string }>();
+    `SELECT r.user_id, r.grade FROM onda_responders r
+     JOIN onda_users u ON u.id = r.user_id
+     WHERE r.status = 'approved' AND r.available = 1 AND u.region = ? ${gradeFilter}`
+  ).bind(region).all<{ user_id: string; grade: string }>();
 
   let candidateCount = 0;
   for (const r of approvedResponders.results) {
@@ -46,7 +50,7 @@ app.post("/api/dispatch/create", requireAuth(), async (c) => {
     const [lat, lng] = locStr.split(",").map(Number);
     const dist = haversine(reqLat, reqLng, lat, lng);
 
-    if (dist <= MATCH_RADIUS_KM) {
+    if (dist <= regionConfig.matchRadiusKm) {
       const matchId = crypto.randomUUID();
       await c.env.DB.prepare(
         "INSERT INTO onda_matches (id, request_id, responder_id, status) VALUES (?, ?, ?, 'offered')"

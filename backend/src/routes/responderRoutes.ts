@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { ensureAllTables } from "../utils/db";
 import { requireAuth, getUser } from "../utils/auth";
+import { getRegion } from "../utils/regions";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -149,9 +150,12 @@ app.patch("/api/matches/:id/status", requireAuth(), async (c) => {
     const startedAt = match.started_at as string;
     if (startedAt) {
       const mins = Math.max(1, Math.round((Date.now() - new Date(startedAt).getTime()) / 60000));
-      // 등급별 시급: 그린 25,000 / 오렌지 40,000 / 레드 80,000
+      // Region-based hourly rate by grade
       const responder = await c.env.DB.prepare("SELECT grade FROM onda_responders WHERE user_id = ?").bind(user.id).first<{grade:string}>();
-      const hourlyRate = responder?.grade === 'red' ? 80000 : responder?.grade === 'orange' ? 40000 : 25000;
+      const userRegion = await c.env.DB.prepare("SELECT region FROM onda_users WHERE id = ?").bind(user.id).first<{region:string}>();
+      const regionConfig = getRegion(userRegion?.region || 'KR');
+      const grade = responder?.grade || 'green';
+      const hourlyRate = regionConfig.rates[grade as keyof typeof regionConfig.rates] || regionConfig.rates.green;
       const amount = Math.round((mins / 60) * hourlyRate);
       updates.push(`duration_min = ${mins}`, `amount = ${amount}`);
 

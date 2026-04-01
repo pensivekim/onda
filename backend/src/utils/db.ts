@@ -13,6 +13,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       lat REAL,
       lng REAL,
       lang TEXT DEFAULT 'ko',
+      region TEXT DEFAULT 'KR',
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS onda_responders (
@@ -39,6 +40,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       grade_required TEXT DEFAULT 'green',
       source TEXT DEFAULT 'manual',
       urgency TEXT DEFAULT 'normal',
+      region TEXT DEFAULT 'KR',
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS onda_matches (
