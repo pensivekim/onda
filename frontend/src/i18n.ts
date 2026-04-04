@@ -917,6 +917,13 @@ const translations: Record<string, Strings> = {
 };
 
 export function detectLang(): LangCode {
+  // URL ?lang= param takes priority (passed from hi.genomic.cc)
+  const urlLang = new URLSearchParams(window.location.search).get('lang');
+  if (urlLang && translations[urlLang]) {
+    localStorage.setItem('onda_lang', urlLang);
+    document.documentElement.dir = ['ar', 'fa', 'ur'].includes(urlLang) ? 'rtl' : 'ltr';
+    return urlLang as LangCode;
+  }
   const saved = localStorage.getItem('onda_lang');
   if (saved && translations[saved]) {
     document.documentElement.dir = ['ar', 'fa', 'ur'].includes(saved) ? 'rtl' : 'ltr';
