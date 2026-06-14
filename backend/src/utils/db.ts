@@ -217,6 +217,13 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       amount INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
+    // 2단계: 표준 phoneHash 다리 — cphash(canonicalPhoneHash, salt 동일 시 qr와 일치) → onda_users.id.
+    //   서비스 간 '같은 사람' 조인키. 제공자(responder) phone 보유자만 채워짐(수요자 phone NULL).
+    db.prepare(`CREATE TABLE IF NOT EXISTS onda_person_bridge (
+      cphash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`),
   ]);
 
   // Indexes (ignore if exists)
@@ -236,6 +243,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
     "CREATE INDEX IF NOT EXISTS idx_gov_beneficiaries_contract ON onda_gov_beneficiaries(contract_id)",
     "CREATE INDEX IF NOT EXISTS idx_gov_beneficiaries_user ON onda_gov_beneficiaries(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_sponsor_usage_sponsor ON onda_sponsor_usage(sponsor_id)",
+    "CREATE INDEX IF NOT EXISTS idx_person_bridge_user ON onda_person_bridge(user_id)",
   ];
   for (const sql of indexes) {
     try { await db.prepare(sql).run(); } catch {}
