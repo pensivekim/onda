@@ -3,6 +3,7 @@ import type { Env } from "../types";
 import { ensureAllTables } from "../utils/db";
 import { requireAuth, getUser } from "../utils/auth";
 import { getRegion } from "../utils/regions";
+import { recordOndaPersonBridge } from "../utils/personBridge";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +27,14 @@ app.post("/api/responders/register", requireAuth(), async (c) => {
   // Update user role
   await c.env.DB.prepare("UPDATE onda_users SET role = 'responder', phone = ? WHERE id = ?")
     .bind(body.phone || "", user.id).run();
+
+  // 2단계 표준 phoneHash 다리 — phone 저장 직후 best-effort upsert (비차단).
+  //   salt 미설정/phone 빈값이면 graceful skip → 제공자 신청은 정상 성공. executionCtx 없으면 방어 skip.
+  try {
+    c.executionCtx.waitUntil(
+      recordOndaPersonBridge(c.env.DB, user.id, body.phone || "", c.env.CANONICAL_PHONE_SALT || ""),
+    );
+  } catch { /* executionCtx 미가용 등 — 본체 무관 */ }
 
   // Migration: add safety columns
   const migrations = [
