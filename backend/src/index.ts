@@ -8,6 +8,7 @@ import { matchRoutes } from "./routes/matchRoutes";
 import { adminRoutes } from "./routes/adminRoutes";
 import { pushRoutes } from "./routes/pushRoutes";
 import { walletRoutes } from "./routes/walletRoutes";
+import { detectDispatchRoutes } from "./features/detect-dispatch/dispatchRoute";
 import { ensureAllTables } from "./utils/db";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -36,6 +37,7 @@ app.route("/", matchRoutes);
 app.route("/", adminRoutes);
 app.route("/", pushRoutes);
 app.route("/", walletRoutes);
+app.route("/", detectDispatchRoutes);
 
 // Health
 app.get("/health", (c) => c.json({ status: "ok", service: "onda-backend", timestamp: new Date().toISOString() }));
