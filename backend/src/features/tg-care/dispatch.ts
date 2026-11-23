@@ -67,11 +67,12 @@ export async function startDispatch(env: TgEnv, requestId: string, o: { elderId:
 }
 
 /** 어르신 출동 부탁 만들기(텔레그램). 이미 진행 중이면 그 건을 돌려준다. */
-export async function createTgRequest(env: TgEnv, elderId: string, askedBy: string, emergency: boolean): Promise<{ requestId: string; existing: boolean; queued: number }> {
+export async function createTgRequest(env: TgEnv, elderId: string, askedBy: string, emergency: boolean,
+  later?: (p: Promise<unknown>) => Promise<unknown>, emergencyNotice = false): Promise<{ requestId: string; existing: boolean; queued: number }> {
   const live = await env.DB.prepare(
     "SELECT request_id FROM onda_tgc_dispatch WHERE elder_id = ? AND state IN ('offering','exhausted','accepted') LIMIT 1").bind(elderId).first<{ request_id: string }>();
   if (live) {
-    if (emergency) await markEmergency(env, live.request_id, askedBy);
+    if (emergency) { const p = markEmergency(env, live.request_id, askedBy); await (later ? later(p) : p); }
     return { requestId: live.request_id, existing: true, queued: 0 };
   }
   const e = await env.DB.prepare("SELECT id, name, address, lat, lng, region FROM onda_users WHERE id = ?").bind(elderId)
@@ -84,6 +85,11 @@ export async function createTgRequest(env: TgEnv, elderId: string, askedBy: stri
   ).bind(requestId, elderId, e.address || "", e.lat || 0, e.lng || 0, `[온다 텔레그램] ${mask(e.name)} 어르신 긴급 돌봄`,
          emergency ? "emergency" : "urgent", e.region || "KR").run();
   const who = askedBy === elderId ? "본인 요청" : askedBy === "hi_system" ? "말벗 감지" : "가족 요청";
+  // 버튼으로 부른 때(later 있음)는 차례 부탁을 답 뒤로 — 알림 통로 8초 안에 답하려고 (2026-11-24)
+  if (later) {   // 차례 부탁을 먼저 만들고(출동 줄) 그다음 위급 알림 — 순서가 바뀌면 위급 알림이 출동 줄을 못 찾는다
+    await later((async () => { await startDispatch(env, requestId, { elderId, askedBy, emergency, who: `어르신 · ${who}` }); if (emergencyNotice) await markEmergency(env, requestId, askedBy); })());
+    return { requestId, existing: false, queued: -1 };
+  }
   const queued = await startDispatch(env, requestId, { elderId, askedBy, emergency, who: `어르신 · ${who}` });
   return { requestId, existing: false, queued };
 }
