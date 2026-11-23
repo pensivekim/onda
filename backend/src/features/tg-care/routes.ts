@@ -161,6 +161,47 @@ app.get("/api/tg/me", requireAuth(), async (c) => {
   return c.json({ kind: p?.kind || null, linked: !!p?.linked, elders: active });
 });
 
+// 2026-11-24 미니 앱 가족·어르신 화면: 지금 출동 한 건(단계·시각·도우미 거리)과 지난 기록 5건.
+// 볼 수 있는 사람 = 그 어르신 본인·묶인 가족·등록한 도우미·관리자. 도우미 위치는 좌표 대신 집에서 떨어진 거리(50m 단위)만.
+app.get("/api/tg/elders/:id/now", requireAuth(), async (c) => {
+  await ready(c.env.DB);
+  const u = getUser(c);
+  const elderId = c.req.param("id");
+  const can = u.role === "admin" || u.id === elderId
+    || await c.env.DB.prepare("SELECT 1 FROM onda_tgc_family WHERE elder_id = ? AND family_id = ?").bind(elderId, u.id).first()
+    || await c.env.DB.prepare("SELECT 1 FROM onda_tgc_elders WHERE elder_id = ? AND enrolled_by = ?").bind(elderId, u.id).first();
+  if (!can) return c.json({ error: "not found" }, 404);
+  const home = await c.env.DB.prepare("SELECT name, lat, lng FROM onda_users WHERE id = ?").bind(elderId).first<{ name: string; lat: number; lng: number }>();
+  if (!home) return c.json({ error: "not found" }, 404);
+  const rows = (await c.env.DB.prepare(
+    `SELECT d.request_id, d.state, d.emergency, d.created_at, r.status AS req_status
+       FROM onda_tgc_dispatch d LEFT JOIN onda_requests r ON r.id = d.request_id
+      WHERE d.elder_id = ? ORDER BY d.created_at DESC LIMIT 6`).bind(elderId).all<any>()).results;
+  const withMatch = async (d: any) => {
+    const m = await c.env.DB.prepare(
+      `SELECT m.responder_id, m.status, m.accepted_at, m.arrived_at, m.started_at, m.completed_at, u.name
+         FROM onda_matches m JOIN onda_users u ON u.id = m.responder_id
+        WHERE m.request_id = ? AND m.status IN ('accepted','moving','arrived','in_progress','completed') LIMIT 1`).bind(d.request_id).first<any>();
+    return { requestId: d.request_id, state: d.state, emergency: !!d.emergency, createdAt: d.created_at, reqStatus: d.req_status,
+      match: m ? { status: m.status, acceptedAt: m.accepted_at, arrivedAt: m.arrived_at, startedAt: m.started_at, completedAt: m.completed_at, helper: mask(m.name) } : null,
+      _helperId: m?.responder_id as string | undefined };
+  };
+  const list = await Promise.all(rows.map(withMatch));
+  const cur = list[0] && !["completed", "cancelled"].includes(list[0].reqStatus) && list[0].state !== "done" && list[0].state !== "cancelled" ? list[0] : null;
+  let near: { m: number; dx: number; dy: number } | null = null;
+  if (cur?._helperId && cur.match && cur.match.status !== "completed" && home.lat && home.lng) {
+    const loc = await c.env.LOCATION_KV.get(`loc:${cur._helperId}`);
+    if (loc) {
+      const [la, lo] = loc.split(",").map(Number);
+      const r50 = (v: number) => Math.round(v / 50) * 50;
+      const dy = (la - home.lat) * 111320, dx = (lo - home.lng) * 111320 * Math.cos(home.lat * Math.PI / 180);
+      near = { m: r50(Math.hypot(dx, dy)), dx: r50(dx), dy: r50(dy) };
+    }
+  }
+  const strip = ({ _helperId, ...x }: any) => x;
+  return c.json({ elder: { id: elderId, name: home.name }, now: cur ? { ...strip(cur), near } : null, past: list.filter((x) => x !== cur).slice(0, 5).map(strip) });
+});
+
 // ───────────── 말벗(hi.genomic.cc) 경보 → 온다 출동 ─────────────
 // 말벗은 보호자 텔레그램(@Lumi_ansim_bot)으로 먼저 알리고, 아무도 «확인»하지 않아 보호자 차례가 끝나면 여기로 넘긴다
 // (hi-backend notify/dispatch.ts 의 ONDA_DISPATCH_ENABLED 자리). 서명 = HMAC(HI_ONDA_SECRET, ts + '.' + sha256(본문)), 머리말 x-hi-ts·x-hi-sig

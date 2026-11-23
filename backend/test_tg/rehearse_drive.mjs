@@ -30,13 +30,16 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   const to = async (chat) => { await pull(); return rows.filter((x) => String(x.chat_id) === String(chat)); };
   const texts = async (chat) => (await to(chat)).map((x) => x.b.text || "").filter(Boolean);
   const has = async (chat, s, tries = 6) => { for (let i = 0; i < tries; i++) { if ((await texts(chat)).some((t) => t.includes(s))) return true; if (i < tries - 1) await wait(700); } return false; };
-  const press = async (chat, label, tries = 8) => {
+  // 이 표시(mark) 뒤에 새로 온 글만 본다 — 앞 단계의 같은 글을 새 글로 잘못 보던 것(2026-11-24 실서버 예행에서 찾음)
+  const mark = async () => { await pull(); return rows.length ? rows.at(-1).id : 0; };
+  const hasAfter = async (m, chat, s, tries = 10) => { for (let i = 0; i < tries; i++) { if ((await to(chat)).some((x) => x.id > m && (x.b.text || "").includes(s))) return true; if (i < tries - 1) await wait(700); } return false; };
+  const press = async (chat, label, tries = 8, after = 0) => {
     for (let i = 0; i < tries; i++) {   // 버튼 글이 응답 뒤에 늦게 오는 때가 있어 조금 기다리며 다시 본다(2026-11-24 7회차)
-      const hit = (await to(chat)).some((x) => (x.b.reply_markup?.inline_keyboard || []).flat().some((b) => b.text.includes(label)));
+      const hit = (await to(chat)).some((x) => x.id > after && (x.b.reply_markup?.inline_keyboard || []).flat().some((b) => b.text.includes(label)));
       if (hit) break;
       await wait(700);
     }
-    const list = (await to(chat)).reverse();
+    const list = (await to(chat)).filter((x) => x.id > after).reverse();
     for (const x of list) for (const b of (x.b.reply_markup?.inline_keyboard || []).flat())
       if (b.text.includes(label) && b.callback_data) {
         const msgId = x.method === "editMessageText" ? x.b.message_id : 900000 + Number(x.id);
@@ -113,17 +116,22 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   ok(fl.code === 200, "가족 미니 앱 로그인 실패");
   const me = await ondaApi("GET", "/api/tg/me", undefined, "Bearer " + fl.j.token);
   ok(me.j.kind === "family" && me.j.elders?.[0]?.last, "가족 화면에 출동 기록 없음");
-  step(`가족 미니 앱 → 출동 기록 보임 (상태 ${me.j.elders[0].last.state})`);
+  const nw = await ondaApi("GET", `/api/tg/elders/${el.j.elderId}/now`, undefined, "Bearer " + fl.j.token);
+  ok(nw.code === 200 && nw.j.now === null && nw.j.past?.[0]?.match?.status === "completed", "가족 미니 앱 지난 기록에 마침 없음 " + JSON.stringify(nw.j).slice(0, 200));
+  const nx = await ondaApi("GET", `/api/tg/elders/${el.j.elderId}/now`, undefined, R);
+  ok(nx.code === 401 || nx.code === 404, "남이 어르신 화면을 봄");
+  step(`가족 미니 앱 → 출동 기록 보임 (상태 ${me.j.elders[0].last.state}) · 지난 기록 마침`);
 
   // 8 어려운 길: 가족 «위급» → 119 안내 · 상황실 위급 → 담당이 «못 갑니다» → 다음 분 수락 → 마침
+  const m8 = await mark();
   await say(IDS.fam, "🆘 어르신께 출동 부탁");
-  await press(IDS.fam, "위급");
-  ok(await has(IDS.fam, "119"), "가족에게 119 안내 없음");
-  ok(await has(IDS.ops, "위급"), "예행 상황실 위급 알림 없음");
-  ok(await has(IDS.h1, "1번째"), "위급 출동이 담당 도우미에게 안 감");
-  await press(IDS.h1, "못 갑니다");
-  ok(await has(IDS.h2, "2번째"), "거절 뒤 다음 도우미에게 안 감");
-  await press(IDS.h2, "제가 가겠습니다");
+  await press(IDS.fam, "위급", 8, m8);
+  ok(await hasAfter(m8, IDS.fam, "119"), "가족에게 119 안내 없음");
+  ok(await hasAfter(m8, IDS.ops, "위급"), "예행 상황실 위급 알림 없음");
+  ok(await hasAfter(m8, IDS.h1, "1번째"), "위급 출동이 담당 도우미에게 안 감");
+  await press(IDS.h1, "못 갑니다", 8, m8);
+  ok(await hasAfter(m8, IDS.h2, "2번째"), "거절 뒤 다음 도우미에게 안 감");
+  await press(IDS.h2, "제가 가겠습니다", 8, m8);
   ok(await has(IDS.fam, "가상두리") || await has(IDS.fam, "부탁을 받았습니다"), "두 번째 수락 가족 알림 없음");
   await press(IDS.h2, "출발했어요"); await press(IDS.h2, "도착했어요"); await press(IDS.h2, "돌봄 시작"); await press(IDS.h2, "마쳤어요");
   ok((await texts(IDS.fam)).filter((t) => t.includes("마쳤습니다")).length >= 2, "두 번째 마침 알림 없음");
@@ -134,11 +142,12 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
     const pr = await ondaApi("POST", "/api/tg/rehearse/evac", { stage: "prep", helperId: hB.id }, R);
     ok(pr.code === 200 && pr.j.ok, "다올 예보 넣기 실패 " + JSON.stringify(pr.j));
     ok(await has(IDS.h2, "사전 점검"), "담당 도우미 사전 점검 알림 없음");
+    const m9 = await mark();
     const sr = await ondaApi("POST", "/api/tg/rehearse/evac", { stage: "start" }, R);
     ok(sr.code === 200 && sr.j.ok, "대피 시작 실패 " + JSON.stringify(sr.j));
-    ok(await has(IDS.h2, "대피"), "도우미 대피 출동 부탁 없음");
-    await press(IDS.h2, "제가 가겠습니다");
-    await press(IDS.h2, "출발했어요"); await press(IDS.h2, "댁에 도착했어요"); await press(IDS.h2, "모시고 출발해요"); await press(IDS.h2, "대피소에 도착했어요");
+    ok(await hasAfter(m9, IDS.h2, "대피"), "도우미 대피 출동 부탁 없음");
+    await press(IDS.h2, "제가 가겠습니다", 8, m9);
+    await press(IDS.h2, "출발했어요", 8, m9); await press(IDS.h2, "댁에 도착했어요"); await press(IDS.h2, "모시고 출발해요"); await press(IDS.h2, "대피소에 도착했어요");
     ok((await to(IDS.h2)).some((x) => (x.b.text || "").includes("대피 완료")), "대피 완료 기록 안내 없음");
     step("다올: 가상 읍면동 예보 → 사전 점검 → 대피 시작 → 수락·방문·모시고 출발·대피소 도착");
   }
