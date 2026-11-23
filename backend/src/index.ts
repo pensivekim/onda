@@ -12,6 +12,7 @@ import { detectDispatchRoutes } from "./features/detect-dispatch/dispatchRoute";
 import { evacRoutes } from "./features/evac-dispatch/evacRoutes";
 import { evacTelegramRoutes } from "./features/evac-dispatch/telegram";
 import { tgCareRoutes, tgCareTick } from "./features/tg-care/routes"; // 온다 텔레그램판 (2026-11-22)
+import { tgRehearseRoutes } from "./features/tg-care/rehearse"; // 예행(가상 사람) 준비·치우기 (2026-11-23)
 import { ensureAllTables } from "./utils/db";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -44,6 +45,7 @@ app.route("/", detectDispatchRoutes);
 app.route("/", evacRoutes);          // 이웃대피: 예보→대피 출동 (2026-10-26 대표 승인 «고쳐라»)
 app.route("/", evacTelegramRoutes);  // 이웃대피: 도우미 텔레그램 버튼
 app.route("/", tgCareRoutes);        // 온다 텔레그램판: 어르신·가족·도우미·상황실 (알림 통로 경유)
+app.route("/", tgRehearseRoutes);    // 예행 — TG_REH_TOKEN 없으면 닫힘
 
 // Health
 app.get("/health", (c) => c.json({ status: "ok", service: "onda-backend", timestamp: new Date().toISOString() }));

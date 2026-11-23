@@ -62,9 +62,12 @@ const tick = async () => (await mf.getWorker()).scheduled({ cron: "* * * * *" })
 const step = (s) => console.log("✔", s);
 
 // 상황실 단체방
-const ops = await api("POST", "/api/tg/ops/link", { name: "gasang" }, ADMIN);
+const ops = await api("POST", "/api/tg/ops/link", { name: "reh-gasang" }, ADMIN);
 await start(ops.j.url, -3000, "가상군 상황실", "group", 99);
 assert.ok(lastText(-3000).includes("상황실 방으로 연결")); step("상황실 단체방 연결");
+// 실제 상황실(예행 아님)도 하나 — 가상 어르신 일은 여기로 가면 안 된다 (목표 2 예행 2026-11-23)
+const opsReal = await api("POST", "/api/tg/ops/link", { name: "real" }, ADMIN);
+await start(opsReal.j.url, -3100, "실제 상황실", "group", 98);
 
 // 도우미 3명: 텔레그램 초대 → 승인 → 출동 받기 켜기 → 위치
 const H = {};
@@ -117,7 +120,8 @@ await press(4001, "아니요");
 assert.ok(lastText(2001).includes("1번째"), "담당 도우미가 먼저");
 assert.ok(!to(2002).some((x) => x.body.text?.includes("부탁")), "한꺼번에 안 보냄");
 assert.ok(lastText(-3000).includes("출동 부탁 — 가○○ (어르신 · 본인 요청)"));
-step("도와주세요 → 담당 도우미 한 분께만 먼저 부탁, 상황실 알림");
+assert.ok(!to(-3100).some((x) => x.body.text?.includes("출동 부탁")), "가상 어르신 일이 실제 상황실로 가면 안 됨");
+step("도와주세요 → 담당 도우미 한 분께만 먼저 부탁, 상황실 알림(예행 상황실에만)");
 // 같은 어르신이 또 누르면 새 건을 만들지 않음
 await say(4001, "🆘 도와주세요"); await press(4001, "아니요");
 assert.equal((await db.prepare("SELECT COUNT(*) n FROM onda_tgc_dispatch").first()).n, 1);

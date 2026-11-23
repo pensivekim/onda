@@ -23,14 +23,17 @@ const getD = (db: D1Database, reqId: string) => db.prepare("SELECT * FROM onda_t
  * 대상: 승인·대기 중·같은 나라·필요 등급 이상. 위치가 반경 안이면 가까운 순, 위치를 모르면 텔레그램으로 닿는 분만 뒤에.
  * 1) 그 어르신을 등록한 담당 도우미 먼저 2) 가까운 순 3) 위치 모름.
  */
-export async function buildQueue(env: TgEnv, o: { excludeId: string; lat: number; lng: number; region?: string; grade?: string; enrolledBy?: string | null })
+export async function buildQueue(env: TgEnv, o: { excludeId: string; lat: number; lng: number; region?: string; grade?: string; enrolledBy?: string | null; elderId?: string })
   : Promise<{ id: string; km: number | null }[]> {
   const grades = o.grade === "red" ? ["red"] : o.grade === "orange" ? ["orange", "red"] : ["green", "orange", "red"];
+  // 예행(2026-11-23): «가상» 어르신은 «가상» 도우미에게만, 실제 어르신은 실제 도우미에게만
+  const reh = o.elderId ? (await userName(env.DB, o.elderId)).startsWith("가상") : false;
   const r = await env.DB.prepare(
     `SELECT r.user_id, (SELECT p.linked FROM onda_tgc_people p WHERE p.user_id = r.user_id AND p.kind = 'helper') AS tg
        FROM onda_responders r JOIN onda_users u ON u.id = r.user_id
       WHERE r.status = 'approved' AND r.available = 1 AND r.user_id != ? AND COALESCE(u.region, 'KR') = ?
-        AND r.grade IN (${grades.map(() => "?").join(",")})`).bind(o.excludeId, o.region || "KR", ...grades).all<{ user_id: string; tg: number | null }>();
+        AND r.grade IN (${grades.map(() => "?").join(",")})
+        AND (CASE WHEN u.name LIKE '가상%' THEN 1 ELSE 0 END) = ?`).bind(o.excludeId, o.region || "KR", ...grades, reh ? 1 : 0).all<{ user_id: string; tg: number | null }>();
   const radius = getRegion(o.region || "KR").matchRadiusKm || 3;
   const out: { id: string; km: number | null; pref: number }[] = [];
   for (const { user_id, tg: linked } of r.results) {
@@ -53,11 +56,11 @@ export async function startDispatch(env: TgEnv, requestId: string, o: { elderId:
     .first<{ lat: number; lng: number; region: string; grade_required: string }>();
   if (!rq) throw new Error("no request");
   const enrolled = await env.DB.prepare("SELECT enrolled_by FROM onda_tgc_elders WHERE elder_id = ?").bind(o.elderId).first<{ enrolled_by: string }>();
-  const queue = await buildQueue(env, { excludeId: o.askedBy, lat: rq.lat || 0, lng: rq.lng || 0, region: rq.region, grade: rq.grade_required, enrolledBy: enrolled?.enrolled_by || null });
+  const queue = await buildQueue(env, { excludeId: o.askedBy, lat: rq.lat || 0, lng: rq.lng || 0, region: rq.region, grade: rq.grade_required, enrolledBy: enrolled?.enrolled_by || null, elderId: o.elderId });
   await env.DB.prepare("INSERT OR IGNORE INTO onda_tgc_dispatch (request_id, elder_id, asked_by, queue, emergency) VALUES (?, ?, ?, ?, ?)")
     .bind(requestId, o.elderId, o.askedBy, JSON.stringify(queue), o.emergency ? 1 : 0).run();
   const name = mask(await userName(env.DB, o.elderId));
-  await sendMany(tg(env), env.DB, await opsRooms(env.DB),
+  await sendMany(tg(env), env.DB, await opsRooms(env.DB, o.elderId),
     `[온다] ${o.emergency ? "🚨 위급 " : ""}출동 부탁 — ${name} (${o.who || "요청"}) · 부탁할 도우미 ${queue.length}명`);
   await offerNext(env, requestId);
   return queue.length;
@@ -139,7 +142,7 @@ export async function offerNext(env: TgEnv, requestId: string): Promise<string |
   // 남은 분 없음
   await env.DB.prepare("UPDATE onda_tgc_dispatch SET idx = ?, state = 'exhausted', cur_match = NULL, offer_ref = NULL WHERE request_id = ?").bind(idx, requestId).run();
   if (d.state !== "exhausted") {
-    await sendMany(t, env.DB, await opsRooms(env.DB), `[온다] ⚠️ ${name} — 부탁드린 도우미가 모두 못 받으셨습니다. 직접 연락이 필요합니다.`,
+    await sendMany(t, env.DB, await opsRooms(env.DB, d.elder_id), `[온다] ⚠️ ${name} — 부탁드린 도우미가 모두 못 받으셨습니다. 직접 연락이 필요합니다.`,
       { buttons: [[{ text: "🔁 다시 부탁하기", data: `r:${requestId}` }]] });
     await sendMany(t, env.DB, [roomOf(d.elder_id), ...(await familyRooms(env.DB, d.elder_id))],
       "가까운 도우미를 찾고 있습니다. 상황실에서 곧 연락드립니다.\n위급하시면 바로 119 에 전화하세요.");
@@ -159,7 +162,7 @@ export async function restartQueue(env: TgEnv, requestId: string) {
   const rq = await env.DB.prepare("SELECT lat, lng, region, grade_required FROM onda_requests WHERE id = ?").bind(requestId)
     .first<{ lat: number; lng: number; region: string; grade_required: string }>();
   const enrolled = await env.DB.prepare("SELECT enrolled_by FROM onda_tgc_elders WHERE elder_id = ?").bind(d.elder_id).first<{ enrolled_by: string }>();
-  const q = await buildQueue(env, { excludeId: d.asked_by || d.elder_id, lat: rq?.lat || 0, lng: rq?.lng || 0, region: rq?.region, grade: rq?.grade_required, enrolledBy: enrolled?.enrolled_by || null });
+  const q = await buildQueue(env, { excludeId: d.asked_by || d.elder_id, lat: rq?.lat || 0, lng: rq?.lng || 0, region: rq?.region, grade: rq?.grade_required, enrolledBy: enrolled?.enrolled_by || null, elderId: d.elder_id });
   await env.DB.prepare("UPDATE onda_tgc_dispatch SET queue = ?, idx = 0, state = 'offering' WHERE request_id = ?").bind(JSON.stringify(q), requestId).run();
   await offerNext(env, requestId);
   return true;
@@ -222,7 +225,7 @@ export async function syncStatus(env: TgEnv, requestId: string) {
   const fmsg = STATUS_FAMILY[m.status]?.(helper) + (m.status === "completed" && m.duration_min ? ` (${m.duration_min}분)` : "");
   await sendMany(t, env.DB, fam, fmsg);
   if (STATUS_ELDER[m.status]) await sendMany(t, env.DB, [roomOf(d.elder_id)], STATUS_ELDER[m.status]);
-  await sendMany(t, env.DB, await opsRooms(env.DB), `[온다] ${elderName} 어르신 — ${fmsg}`);
+  await sendMany(t, env.DB, await opsRooms(env.DB, d.elder_id), `[온다] ${elderName} 어르신 — ${fmsg}`);
   if (m.status === "completed") {
     await env.DB.prepare("UPDATE onda_tgc_dispatch SET state = 'done' WHERE request_id = ?").bind(requestId).run();
     if (t) for (const ref of Object.values(JSON.parse(d.live_refs || "{}") as Record<string, string>)) { try { await t.stopLocation(ref); } catch {} }
@@ -240,7 +243,7 @@ export async function markEmergency(env: TgEnv, requestId: string, byUserId: str
   const t = tg(env);
   const msg = `🚨 ${name} 어르신 위급 — ${who}께 119 전화를 안내했습니다.`;
   await sendMany(t, env.DB, (await familyRooms(env.DB, d.elder_id)).filter((r) => r !== roomOf(byUserId)), msg);
-  await sendMany(t, env.DB, await opsRooms(env.DB), `[온다] ${msg}`);
+  await sendMany(t, env.DB, await opsRooms(env.DB, d.elder_id), `[온다] ${msg}`);
   await env.DB.prepare("INSERT INTO onda_admin_logs (admin_id, action, target_type, target_id, memo) VALUES ('system', 'tg_emergency', 'request', ?, ?)")
     .bind(requestId, byUserId).run();
 }

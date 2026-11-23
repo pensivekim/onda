@@ -6,6 +6,7 @@ import { tongro, type Tongro, type Key } from "./tongro";
 export type TgEnv = Env & {
   TONGRO_BASE?: string; TONGRO_SERVICE?: string; TONGRO_SECRET?: string;
   TG_OFFER_SECONDS?: string; TG_OFFER_SECONDS_WEB?: string; TG_WEBAPP_URL?: string; HI_ONDA_SECRET?: string;
+  TG_REH_TOKEN?: string;   // 예행(가상 사람) 준비·치우기 열쇠 — 없으면 예행 입구는 닫힘
 };
 export const DEFAULT_TONGRO = "https://alim-tongro.ansimservice.workers.dev";
 export const offerSeconds = (env: TgEnv) => Math.min(300, Math.max(20, Number(env.TG_OFFER_SECONDS) || 50));
@@ -121,9 +122,13 @@ export async function familyRooms(db: D1Database, elderId: string): Promise<stri
       WHERE f.elder_id = ? AND p.linked = 1 AND p.kind = 'family'`).bind(elderId).all<{ room_key: string }>();
   return r.results.map((x) => x.room_key);
 }
-export async function opsRooms(db: D1Database): Promise<string[]> {
+// 예행(목표 2, 2026-11-23): 이름이 «가상»으로 시작하는 어르신 일은 예행 상황실(ops:reh…)에만, 실제 어르신 일은 예행 상황실을 뺀 곳에만 알린다
+export const REH_OPS_PREFIX = "ops:reh";
+export async function opsRooms(db: D1Database, elderId?: string): Promise<string[]> {
   const r = await db.prepare("SELECT room_key FROM onda_tgc_people WHERE kind = 'ops' AND linked = 1").all<{ room_key: string }>();
-  return r.results.map((x) => x.room_key);
+  const rooms = r.results.map((x) => x.room_key);
+  const reh = elderId ? (await userName(db, elderId)).startsWith("가상") : false;
+  return rooms.filter((k) => k.startsWith(REH_OPS_PREFIX) === reh);
 }
 export async function isLinked(db: D1Database, room: string) {
   return !!(await db.prepare("SELECT 1 FROM onda_tgc_people WHERE room_key = ? AND linked = 1").bind(room).first());

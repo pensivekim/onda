@@ -63,8 +63,8 @@ const step = (s) => console.log("✔", s);
 
 
 // 도우미 1명: 온다 봇으로 묶기
-const r0 = await api("POST", "/api/tg/helpers/invite", { name: "가상하나" }, ADMIN);
-await start(r0.j.url, 2001, "가상하나");
+const r0 = await api("POST", "/api/tg/helpers/invite", { name: "시험하나" }, ADMIN);
+await start(r0.j.url, 2001, "시험하나");
 await db.prepare("UPDATE onda_responders SET status='approved', available=1 WHERE user_id=?").bind(r0.j.helperId).run();
 await loc(2001, 35.8710, 128.6010);
 const HID = r0.j.helperId;

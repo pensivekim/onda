@@ -185,7 +185,8 @@ app.post("/api/evac/alerts/:id/start", requireAdmin(), async (c) => {
 
   // 도우미 상태(승인·대기 중) + 마지막 위치
   const resp = await c.env.DB.prepare(
-    "SELECT user_id, grade FROM onda_responders WHERE status = 'approved' AND available = 1"
+    // 예행(2026-11-23): «가상» 도우미는 실제 대피 부탁에서 뺀다
+    "SELECT r.user_id, r.grade FROM onda_responders r JOIN onda_users u ON u.id = r.user_id WHERE r.status = 'approved' AND r.available = 1 AND u.name NOT LIKE '가상%'"
   ).all<{ user_id: string; grade: Grade }>();
   const helpers: HelperState[] = [];
   for (const r of resp.results) {
