@@ -29,6 +29,8 @@ mf = new Miniflare({ modules: true, scriptPath: "test_tg/out.mjs", compatibility
   bindings: { JWT_SECRET: "jwt", FRONTEND_URL: "https://onda.test", TONGRO_BASE: "https://tongro.test", TONGRO_SECRET: svc.secret, TG_OFFER_SECONDS: "20", TG_REH_TOKEN: REH },
   outboundService: route });
 const db = await mf.getD1Database("DB");
+// 실서버처럼 예전에 만든 표(칸 빠짐)에서 시작 — region·lat·lng·email 등이 없어도 칸을 더해 돌아야 한다
+await db.prepare("CREATE TABLE onda_users (id TEXT PRIMARY KEY, name TEXT, role TEXT DEFAULT 'requester', phone TEXT, created_at TEXT DEFAULT (datetime('now')))").run();
 const env = { onda: "https://onda.test", tongro: "https://tongro.test", tongroAdmin: "ADM", rehToken: REH, botToken: BOT, wait: async () => {}, log: () => {} };
 
 // 실제 사람(실제 상황실·실제 도우미)도 함께 있다 — 예행이 이들에게 닿으면 안 된다
@@ -64,6 +66,9 @@ assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_settlements").fir
 assert.ok(await db.prepare("SELECT 1 FROM onda_tgc_people WHERE room_key='ops:main'").first(), "실제 상황실 남음");
 const left = (await tEnv.DB.prepare("SELECT chat_id FROM rooms").all()).results.map((r) => r.chat_id);
 assert.ok(left.every((c) => Math.abs(Number(c)) < 990000000000), "통로에 가상 방 남음");
+const cols = (await db.prepare("PRAGMA table_info(onda_users)").all()).results.map((r) => r.name);
+assert.ok(cols.includes("region") && cols.includes("lat"), "빠진 칸 더함");
+console.log("✔ 예전 표에 빠진 칸(region 등) 저절로 더함");
 console.log("✔ 치우기: 가상 사람·요청·출동·정산·통로 방 0, 실제 사람·실제 상황실 그대로", JSON.stringify(cl.onda.removed));
 await mf.dispose();
 console.log("\n예행 시험 모두 통과");

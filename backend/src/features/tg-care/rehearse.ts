@@ -93,4 +93,7 @@ app.post("/api/tg/rehearse/clear", async (c) => {
   return c.json({ ok: true, people: people.length, requests: reqs.length, matches: matches.length, removed });
 });
 
+// 예행 입구에서 난 오류는 열쇠 가진 쪽에만 이유를 돌려준다(고치기 쉽게)
+app.onError((e, c) => c.json({ error: String((e as Error)?.message || e).slice(0, 300) }, 500));
+
 export { app as tgRehearseRoutes };

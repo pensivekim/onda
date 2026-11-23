@@ -1,6 +1,8 @@
 export async function ensureAllTables(db: D1Database): Promise<void> {
+  const SQLS: string[] = [];
+  const P = (sql: string) => { SQLS.push(sql); return db.prepare(sql); };
   await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_users (
+    P(`CREATE TABLE IF NOT EXISTS onda_users (
       id TEXT PRIMARY KEY,
       kakao_id TEXT UNIQUE,
       google_id TEXT UNIQUE,
@@ -18,7 +20,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       region TEXT DEFAULT 'KR',
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_responders (
+    P(`CREATE TABLE IF NOT EXISTS onda_responders (
       user_id TEXT PRIMARY KEY,
       grade TEXT DEFAULT 'green',
       cert_photo_url TEXT,
@@ -37,7 +39,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       suspended_reason TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_requests (
+    P(`CREATE TABLE IF NOT EXISTS onda_requests (
       id TEXT PRIMARY KEY,
       requester_id TEXT NOT NULL,
       type TEXT DEFAULT 'child',
@@ -52,7 +54,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       region TEXT DEFAULT 'KR',
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_matches (
+    P(`CREATE TABLE IF NOT EXISTS onda_matches (
       id TEXT PRIMARY KEY,
       request_id TEXT NOT NULL,
       responder_id TEXT NOT NULL,
@@ -65,7 +67,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       status TEXT DEFAULT 'offered',
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_settlements (
+    P(`CREATE TABLE IF NOT EXISTS onda_settlements (
       id TEXT PRIMARY KEY,
       match_id TEXT NOT NULL,
       responder_id TEXT NOT NULL,
@@ -76,7 +78,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       paid_at TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_notifications (
+    P(`CREATE TABLE IF NOT EXISTS onda_notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
       type TEXT,
@@ -85,7 +87,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       read INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_admin_logs (
+    P(`CREATE TABLE IF NOT EXISTS onda_admin_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       admin_id TEXT,
       action TEXT,
@@ -94,7 +96,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       memo TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_reviews (
+    P(`CREATE TABLE IF NOT EXISTS onda_reviews (
       id TEXT PRIMARY KEY,
       match_id TEXT NOT NULL,
       reviewer_id TEXT NOT NULL,
@@ -103,7 +105,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       comment TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_messages (
+    P(`CREATE TABLE IF NOT EXISTS onda_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       match_id TEXT NOT NULL,
       sender_id TEXT NOT NULL,
@@ -111,7 +113,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Push subscriptions
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_push_subscriptions (
+    P(`CREATE TABLE IF NOT EXISTS onda_push_subscriptions (
       user_id TEXT PRIMARY KEY,
       endpoint TEXT NOT NULL,
       p256dh TEXT NOT NULL,
@@ -119,7 +121,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Complaints (민원)
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_complaints (
+    P(`CREATE TABLE IF NOT EXISTS onda_complaints (
       id TEXT PRIMARY KEY,
       request_id TEXT,
       match_id TEXT,
@@ -133,12 +135,12 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Wallet (예치금)
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_wallets (
+    P(`CREATE TABLE IF NOT EXISTS onda_wallets (
       user_id TEXT PRIMARY KEY,
       balance INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT (datetime('now'))
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_wallet_transactions (
+    P(`CREATE TABLE IF NOT EXISTS onda_wallet_transactions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       type TEXT NOT NULL,
@@ -148,7 +150,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Phase 3: 면허 검증
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_licenses (
+    P(`CREATE TABLE IF NOT EXISTS onda_licenses (
       id TEXT PRIMARY KEY,
       responder_id TEXT NOT NULL,
       license_type TEXT NOT NULL,
@@ -160,7 +162,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Phase 3: 지자체 계약
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_gov_contracts (
+    P(`CREATE TABLE IF NOT EXISTS onda_gov_contracts (
       id TEXT PRIMARY KEY,
       gov_name TEXT NOT NULL,
       region TEXT NOT NULL,
@@ -178,7 +180,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Phase 3: 지자체 수혜자 (취약계층)
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_gov_beneficiaries (
+    P(`CREATE TABLE IF NOT EXISTS onda_gov_beneficiaries (
       id TEXT PRIMARY KEY,
       contract_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
@@ -191,7 +193,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       UNIQUE(contract_id, user_id)
     )`),
     // Phase 3: 기업 스폰서
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_sponsors (
+    P(`CREATE TABLE IF NOT EXISTS onda_sponsors (
       id TEXT PRIMARY KEY,
       company_name TEXT NOT NULL,
       contact_name TEXT,
@@ -209,7 +211,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
       created_at TEXT DEFAULT (datetime('now'))
     )`),
     // Phase 3: 스폰서 사용 내역
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_sponsor_usage (
+    P(`CREATE TABLE IF NOT EXISTS onda_sponsor_usage (
       id TEXT PRIMARY KEY,
       sponsor_id TEXT NOT NULL,
       request_id TEXT NOT NULL,
@@ -219,7 +221,7 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
     )`),
     // 2단계: 표준 phoneHash 다리 — cphash(canonicalPhoneHash, salt 동일 시 qr와 일치) → onda_users.id.
     //   서비스 간 '같은 사람' 조인키. 제공자(responder) phone 보유자만 채워짐(수요자 phone NULL).
-    db.prepare(`CREATE TABLE IF NOT EXISTS onda_person_bridge (
+    P(`CREATE TABLE IF NOT EXISTS onda_person_bridge (
       cphash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       updated_at TEXT DEFAULT (datetime('now'))
@@ -248,4 +250,38 @@ export async function ensureAllTables(db: D1Database): Promise<void> {
   for (const sql of indexes) {
     try { await db.prepare(sql).run(); } catch {}
   }
+  await ensureColumns(db, SQLS);
+}
+
+/**
+ * 예전에 만든 표에 나중에 더한 칸이 없으면 더한다 (2026-11-23: 실서버 onda_users 에 region 칸이 없어
+ * 텔레그램판 도우미 초대·출동 차례가 «no column named region» 으로 멈춘 것 고침). 칸 더하기만 하고 지우거나 바꾸지 않는다.
+ */
+const COLS_DONE = new WeakSet<object>();
+export async function ensureColumns(db: D1Database, sqls: string[]): Promise<string[]> {
+  if (COLS_DONE.has(db)) return [];
+  const added: string[] = [];
+  for (const sql of sqls) {
+    const m = /CREATE TABLE IF NOT EXISTS (\w+)\s*\(([\s\S]*)\)\s*$/.exec(sql.trim());
+    if (!m) continue;
+    const [, table, inner] = m;
+    const parts: string[] = []; let depth = 0, cur = "";
+    for (const ch of inner) { if (ch === "(") depth++; if (ch === ")") depth--; if (ch === "," && depth === 0) { parts.push(cur); cur = ""; } else cur += ch; }
+    parts.push(cur);
+    let have: Set<string>;
+    try { have = new Set((await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>()).results.map((r) => r.name)); } catch { continue; }
+    for (const raw of parts) {
+      const p = raw.trim().replace(/\s+/g, " ");
+      if (!p || /^(PRIMARY KEY|UNIQUE|FOREIGN KEY|CHECK|CONSTRAINT)\b/i.test(p)) continue;
+      const name = p.split(" ")[0];
+      if (!/^\w+$/.test(name) || have.has(name)) continue;
+      let def = p.slice(name.length).replace(/\bPRIMARY KEY\b|\bAUTOINCREMENT\b|\bUNIQUE\b/gi, "").replace(/\bREFERENCES\b.*$/i, "");
+      if (/DEFAULT\s*\(/i.test(def)) def = def.replace(/DEFAULT\s*\(.*\)/i, "");          // 시각 같은 식 기본값은 칸 더하기에 못 씀
+      if (/NOT NULL/i.test(def) && !/DEFAULT/i.test(def)) def = def.replace(/NOT NULL/i, "");
+      try { await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${name} ${def.trim()}`).run(); added.push(`${table}.${name}`); } catch {}
+    }
+  }
+  COLS_DONE.add(db);
+  if (added.length) console.log("[db] 칸 더함:", added.join(", "));
+  return added;
 }
