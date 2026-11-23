@@ -128,7 +128,7 @@ export default function CreateRequest() {
           </div>
           <button onClick={submit} disabled={loading || !form.address}
             className="w-full py-4 rounded-xl bg-primary text-on-primary font-display font-bold text-lg mt-4 disabled:opacity-40"
-            style={{ boxShadow: '0px 12px 32px rgba(183,16,42,0.2)' }}>
+            style={{ boxShadow: '0px 12px 32px rgba(14,43,44,0.2)' }}>
             {loading ? t('submitting') : t('submitRequest')}
           </button>
         </div>

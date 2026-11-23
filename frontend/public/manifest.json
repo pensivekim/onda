@@ -3,8 +3,8 @@
   "short_name": "온다",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8f9fa",
-  "theme_color": "#b7102a",
+  "background_color": "#EEF2F0",
+  "theme_color": "#0E2B2C",
   "icons": [
     { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" },
     { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml" }

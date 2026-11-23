@@ -65,7 +65,7 @@ export default function MatchDetail() {
         {action && (
           <button onClick={() => updateStatus(action.next)}
             className="w-full py-4 rounded-xl bg-primary text-on-primary font-display font-bold text-lg mt-4"
-            style={{ boxShadow: '0px 12px 32px rgba(183,16,42,0.2)' }}>
+            style={{ boxShadow: '0px 12px 32px rgba(14,43,44,0.2)' }}>
             {action.label}
           </button>
         )}

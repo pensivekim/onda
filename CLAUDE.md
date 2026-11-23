@@ -27,16 +27,13 @@
 - 한 번에 한 기능만. 연쇄 수정 금지.
 - 빌드/배포는 대표님 지시 시에만
 
-## 디자인 시스템 (The Pulse of Precision)
-- **No 1px borders** — 배경색 차이로만 구분
-- **No pure black** — `on_surface` (#191c1d) 사용
-- **No sharp corners** — 최소 rounded-sm (0.25rem)
-- **No HR dividers** — spacing-4 (1rem) 여백 또는 배경색 전환
-- Primary: #b7102a (긴급 액션에만)
-- Surface: #f8f9fa → #f3f4f5 → #ffffff (계층)
-- 폰트: Plus Jakarta Sans (제목) + Manrope (본문)
-- SOS 버튼: pulse 애니메이션, surface_tint (#bb152c)
-- Glassmorphism: 반투명 surface + backdrop-blur 20px
+## 디자인 시스템 — 제노믹 공통 디자인 (2026-11-23 대표 «공통 관제 화면으로 통일», 옛 «The Pulse of Precision» 대체)
+- 기준 묶음: C:\Users\admin\genomic-biz\디자인_공통\ (genomic.css · 안내.md · assets/fonts). 디자인을 바꿀 땐 거기부터 고치고 여기로 복사
+- 온다에 든 사본: frontend/public/assets/genomic.css · frontend/public/assets/fonts/ (index.html 이 불러옴), 색 이름은 tailwind.config.cjs 에서 공통 값으로
+- 색: 주요 단추 밤 초록 #0E2B2C(primary) · 강조 호박 #E3A23B(amber) · 보조 #4F8A7E(secondary) · 바탕 안개 #EEF2F0(surface) · 글 먹 #172322
+- 위험 #B83A26(error)은 SOS·119·위급에만
+- 글꼴: 제목 IBM Plex Sans KR · 본문 Pretendard Variable · 숫자 IBM Plex Mono — 자체 호스팅(구글 글꼴 쓰지 않음)
+- 낱말 중간 줄바꿈 금지(word-break: keep-all). 대외 화면에 점수·«개발 중» 표시 넣지 않음
 
 ## 사용자 유형
 - **요청자**: 맞벌이 부모, 독거노인 가족, 장애인 본인/가족

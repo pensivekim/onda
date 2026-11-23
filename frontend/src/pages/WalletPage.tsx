@@ -41,7 +41,7 @@ export default function WalletPage() {
   return (
     <div className="min-h-screen"><NavBar />
       <div className="max-w-md mx-auto px-5 py-8">
-        <div className="rounded-card p-6 mb-6 text-center text-white" style={{ background: 'linear-gradient(135deg, #b7102a, #db313f)' }}>
+        <div className="rounded-card p-6 mb-6 text-center text-white" style={{ background: 'linear-gradient(135deg, #0E2B2C, #285051)' }}>
           <p className="text-sm opacity-80 mb-1">{t('walletBalance')}</p>
           <p className="font-display text-4xl font-extrabold">{balance.toLocaleString()}</p>
           {lowBalance && <p className="mt-2 text-xs bg-white/20 rounded-full px-3 py-1 inline-block">{t('walletLowMsg')}</p>}

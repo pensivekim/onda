@@ -13,7 +13,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen">
       <NavBar />
-      <section className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #b7102a, #db313f)' }}>
+      <section className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0E2B2C, #285051)' }}>
         <div className="max-w-2xl mx-auto px-6 py-20 text-center text-white">
           <h1 className="font-display text-5xl font-extrabold mb-4 leading-tight">{t('heroTitle')}</h1>
           <p className="text-lg opacity-90 mb-8 leading-relaxed font-body whitespace-pre-line">{t('heroSub')}</p>

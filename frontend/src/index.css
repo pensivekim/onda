@@ -2,13 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 제노믹 공통 디자인(2026-11-23): 값은 /assets/genomic.css 의 --g-* */
 body {
-  font-family: 'Manrope', sans-serif;
-  color: #191c1d;
-  background: #f8f9fa;
+  font-family: var(--g-sans, "Pretendard Variable", sans-serif);
+  color: var(--g-ink, #172322);
+  background: var(--g-mist, #EEF2F0);
   -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  letter-spacing: -0.02em;
+  font-family: var(--g-display, "IBM Plex Sans KR", sans-serif);
+  letter-spacing: -0.01em;
 }

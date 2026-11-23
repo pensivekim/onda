@@ -1,0 +1,51 @@
+/* 제노믹 공통 디자인 (2026-11-23) — 모든 제품 화면이 이 한 벌을 쓴다
+   기준: «제노믹 공통 관제 화면»(I:\제노믹_공통관제화면_20261029) = 홈페이지 genomic.co.kr 결
+   글꼴은 /assets/fonts/ 에 두고 자체 호스팅(무료 사용 허가 OFL). 옛 폰(Chrome 51)도 읽히게 변수·기본 속성만 쓴다 */
+@import url('/assets/fonts/pretendard/pretendard.css');
+@import url('/assets/fonts/fonts.css');
+:root{
+  /* 색 — 회사 초록은 홈페이지 값 하나(#0E2B2C) */
+  --g-night:#0E2B2C;      /* 밤 초록: 머리띠·주요 단추·짙은 면 */
+  --g-night-2:#153A3B;    /* 밤 초록 위 한 단계 */
+  --g-night-hover:#285051;
+  --g-amber:#E3A23B;      /* 호박: 강조·초점·로고 */
+  --g-amber-ink:#795616;  /* 호박 바탕 위 글자 */
+  --g-amber-bg:#FBF1DE;
+  --g-calm:#4F8A7E;       /* 차분한 초록: 보조·정보 */
+  --g-calm-bg:#E6F1EC;
+  --g-mist:#EEF2F0;       /* 안개: 화면 바탕 */
+  --g-paper:#FAFBFA;      /* 종이: 카드 바탕(순백 대신) */
+  --g-card:#FFFFFF;
+  --g-ink:#172322;        /* 먹: 본문 글 */
+  --g-muted:#5E6D6A;      /* 흐린 글 */
+  --g-rule:#CBD5D2;       /* 가는 선 */
+  --g-ok:#286647; --g-ok-bg:#E6F1EA;
+  --g-danger:#B83A26; --g-danger-bg:#F8E4DE;   /* 위험·긴급(119 단추)에만 */
+  /* 글꼴 */
+  --g-sans:"Pretendard Variable",Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --g-display:"IBM Plex Sans KR","Pretendard Variable",sans-serif;
+  --g-mono:"IBM Plex Mono",ui-monospace,monospace;
+  /* 모양 */
+  --g-radius:10px; --g-radius-sm:7px;
+  --g-shadow:0 1px 2px rgba(14,43,44,.06),0 4px 14px rgba(14,43,44,.06);
+}
+.g-root,body.g-root{margin:0;background:var(--g-mist);color:var(--g-ink);font-family:var(--g-sans);line-height:1.6;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word}
+.g-root h1,.g-root h2,.g-root h3{font-family:var(--g-display);letter-spacing:-.01em;color:var(--g-ink)}
+.g-eyebrow{font-family:var(--g-mono);font-size:11px;letter-spacing:2px;color:var(--g-calm)}
+.g-card{background:var(--g-card);border:1px solid #D9E1DC;border-radius:var(--g-radius);box-shadow:var(--g-shadow)}
+.g-btn{display:inline-block;border:1px solid var(--g-rule);border-radius:var(--g-radius-sm);background:var(--g-card);color:var(--g-night);padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+.g-btn--primary{background:var(--g-night);border-color:var(--g-night);color:#fff}
+.g-btn--primary:hover{background:var(--g-night-hover)}
+.g-btn--danger{background:var(--g-danger);border-color:var(--g-danger);color:#fff}
+.g-tag{display:inline-block;font-size:12px;border-radius:20px;padding:3px 10px;background:var(--g-calm-bg);color:var(--g-calm)}
+.g-tag--danger{background:var(--g-danger-bg);color:var(--g-danger)}
+.g-tag--warn{background:var(--g-amber-bg);color:var(--g-amber-ink)}
+.g-tag--ok{background:var(--g-ok-bg);color:var(--g-ok)}
+.g-brand{display:inline-flex;align-items:center;gap:.55rem;text-decoration:none;color:inherit;white-space:nowrap}
+.g-brand__mark{width:1.6rem;height:1.6rem;color:var(--g-amber);flex-shrink:0}
+.g-brand__ko{font-weight:700;font-size:1.12rem;letter-spacing:.02em}
+.g-brand__en{font-size:.72rem;letter-spacing:.24em;opacity:.7}
+:focus-visible{outline:3px solid var(--g-amber);outline-offset:3px}
+/* 어르신 화면: 글자 크게(바탕 20px), 누를 곳 크게(최소 56px) */
+.g-elder{font-size:20px}
+.g-elder .g-btn{min-height:56px;font-size:20px;padding:14px 22px}
