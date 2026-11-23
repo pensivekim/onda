@@ -115,6 +115,20 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   ok(me.j.kind === "family" && me.j.elders?.[0]?.last, "가족 화면에 출동 기록 없음");
   step(`가족 미니 앱 → 출동 기록 보임 (상태 ${me.j.elders[0].last.state})`);
 
+  // 8 어려운 길: 가족 «위급» → 119 안내 · 상황실 위급 → 담당이 «못 갑니다» → 다음 분 수락 → 마침
+  await say(IDS.fam, "🆘 어르신께 출동 부탁");
+  await press(IDS.fam, "위급");
+  ok(await has(IDS.fam, "119"), "가족에게 119 안내 없음");
+  ok(await has(IDS.ops, "위급"), "예행 상황실 위급 알림 없음");
+  ok(await has(IDS.h1, "1번째"), "위급 출동이 담당 도우미에게 안 감");
+  await press(IDS.h1, "못 갑니다");
+  ok(await has(IDS.h2, "2번째"), "거절 뒤 다음 도우미에게 안 감");
+  await press(IDS.h2, "제가 가겠습니다");
+  ok(await has(IDS.fam, "가상두리") || await has(IDS.fam, "부탁을 받았습니다"), "두 번째 수락 가족 알림 없음");
+  await press(IDS.h2, "출발했어요"); await press(IDS.h2, "도착했어요"); await press(IDS.h2, "돌봄 시작"); await press(IDS.h2, "마쳤어요");
+  ok((await texts(IDS.fam)).filter((t) => t.includes("마쳤습니다")).length >= 2, "두 번째 마침 알림 없음");
+  step("가족 «위급» → 119 안내·상황실 위급 → 담당 «못 갑니다» → 다음 분 수락 → 마침");
+
   await pull();
   const chats = [...new Set(rows.map((x) => x.chat_id))];
   return { steps, sent: rows.length, chats };
