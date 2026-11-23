@@ -19,6 +19,11 @@ import {
   sendMany, KB_ELDER, KB_FAMILY, KB_HELPER, TXT, webappUrl,
 } from "./core";
 import { createTgRequest, restartQueue, syncStatus, markEmergency, onHelperLocation, offerNext } from "./dispatch";
+import { evacTongroButtons, STATUS_KO as EVAC_SAID } from "../evac-dispatch/telegram";
+/** 다올(이웃대피) 출동인지 — 그러면 대피용 버튼·문구 */
+async function isEvac(db: D1Database, requestId: string) {
+  try { return !!(await db.prepare("SELECT 1 AS x FROM onda_evac_tasks WHERE request_id = ? LIMIT 1").bind(requestId).first()); } catch { return false; }
+}
 
 const app = new Hono<{ Bindings: TgEnv }>();
 /** 같은 서명은 한 번만 (가로채 다시 보내기 막기). 서명 유효 5분보다 길게 10분 기억 */
@@ -326,6 +331,15 @@ async function onButton(env: TgEnv, ev: any): Promise<Record<string, unknown>> {
   const m = await env.DB.prepare("SELECT id, status, request_id FROM onda_matches WHERE id = ? AND responder_id = ?").bind(matchId, p.user_id)
     .first<{ id: string; status: string; request_id: string }>();
   if (!m) return { toast: "이 출동을 찾을 수 없습니다", buttons: null };
+  const evac = await isEvac(env.DB, m.request_id);
+  const btns = (st: string) => evac ? evacTongroButtons(matchId, st) : helperButtons(matchId, st);
+  const said = (st: string) => evac ? (EVAC_SAID[st] || HELPER_SAID[st]) : HELPER_SAID[st];
+  if (kind === "u") {   // 다올: 도착했거나 모시고 가는 중에만 «모실 수 없어요»
+    if (!evac || !["arrived", "in_progress"].includes(m.status)) return { toast: "지금은 누를 수 없는 버튼입니다" };
+    await env.DB.prepare("UPDATE onda_evac_tasks SET flag = 'unreachable', note = 'helper: 모실 수 없음(텔레그램)' WHERE request_id = ?").bind(m.request_id).run();
+    await env.DB.prepare("INSERT INTO onda_admin_logs (admin_id, action, target_type, target_id, memo) VALUES ('system', 'evac_unreachable', 'match', ?, ?)").bind(matchId, p.user_id).run();
+    return { toast: "기록했습니다", append: `▶ ${EVAC_SAID.unreachable}`, buttons: null };
+  }
   const token = await signToken({ sub: p.user_id, role: "responder", name: "", type: "access", exp: Math.floor(Date.now() / 1000) + 60 }, env.JWT_SECRET);   // 안에서만 쓰는 1분짜리
   const callExisting = (path: string, method: string, body?: unknown) => responderRoutes.request(path, {
     method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -346,7 +360,7 @@ async function onButton(env: TgEnv, ev: any): Promise<Record<string, unknown>> {
       await t.send({ room: ev.room, text: `📍 ${e?.name || ""} 어르신 댁: ${e?.address || "(지도 참고)"}` + (d?.emergency ? `\n\n${TXT.helper119}` : "") + `\n\n${TXT.liveHow}` });
       if (e?.lat && e?.lng) await t.sendLocation(ev.room, e.lat, e.lng);
     } catch {}
-    return { toast: "맡으셨습니다", append: `▶ ${HELPER_SAID.accepted}`, buttons: helperButtons(matchId, "accepted") };
+    return { toast: "맡으셨습니다", append: `▶ ${said("accepted")}`, buttons: btns("accepted") };
   }
   if (kind === "x") {
     if (m.status !== "offered") return { toast: "이미 지난 부탁입니다", buttons: null };
@@ -356,9 +370,9 @@ async function onButton(env: TgEnv, ev: any): Promise<Record<string, unknown>> {
   if (kind === "s" && ["moving", "arrived", "in_progress", "completed"].includes(b)) {
     const r = await callExisting(`/api/matches/${matchId}/status`, "PATCH", { status: b });
     const after = (await env.DB.prepare("SELECT status FROM onda_matches WHERE id = ?").bind(matchId).first<{ status: string }>())?.status || m.status;
-    if (!r.ok || after !== b) return { toast: "기록되지 않았습니다", buttons: helperButtons(matchId, after) };
+    if (!r.ok || after !== b) return { toast: "기록되지 않았습니다", buttons: btns(after) };
     await syncStatus(env, m.request_id);
-    return { toast: "적었습니다", append: `▶ ${HELPER_SAID[b]}`, buttons: b === "completed" ? null : helperButtons(matchId, b) };
+    return { toast: "적었습니다", append: `▶ ${said(b)}`, buttons: b === "completed" ? null : btns(b) };
   }
   if (kind === "e") {
     if (!["accepted", "moving", "arrived", "in_progress"].includes(m.status)) return { toast: "지금은 누를 수 없습니다" };

@@ -11,6 +11,7 @@ import { ensureAllTables } from "../../utils/db";
 import { requireAuth, getUser, signToken } from "../../utils/auth";
 import { sendNotification } from "../../utils/webpush";
 import { responderRoutes } from "../../routes/responderRoutes";
+import { tg as tongroOf, roomOf, isLinked } from "../tg-care/core";
 
 export type TgEnv = Env & { TELEGRAM_BOT_TOKEN?: string; TELEGRAM_BOT_NAME?: string; TELEGRAM_WEBHOOK_SECRET?: string };
 type Btn = { text: string; callback_data: string };
@@ -47,6 +48,10 @@ export function buttonsFor(matchId: string, status: string): Btn[][] {
   }
 }
 
+/** 같은 버튼을 알림 통로 모양({text, data})으로 */
+export const evacTongroButtons = (matchId: string, status: string) =>
+  buttonsFor(matchId, status).map((row) => row.map((b) => ({ text: b.text, data: b.callback_data })));
+
 export const STATUS_KO: Record<string, string> = {
   accepted: "수락하셨습니다. 출발하시면 아래 버튼을 눌러 주세요.",
   moving: "가는 중으로 표시했습니다. 도착하시면 눌러 주세요.",
@@ -65,7 +70,16 @@ export const STATUS_KO: Record<string, string> = {
 export async function notifyHelper(db: D1Database, env: TgEnv, userId: string, title: string, body: string,
                                    type: string, urgent: boolean, matchId?: string): Promise<boolean> {
   await sendNotification(db, userId, title, body, type, urgent);
-  if (!env.TELEGRAM_BOT_TOKEN) return false;
+  // 2026-11-23: 다올 전용 봇 대신 «온다 봇»(알림 통로)으로 — 봇 열쇠는 통로 한곳에만. 버튼은 온다 텔레그램판 버튼 처리기가 받는다
+  if (!env.TELEGRAM_BOT_TOKEN) {
+    const t = tongroOf(env as any);
+    if (!t || !(await isLinked(db, roomOf(userId)).catch(() => false))) return false;
+    try {
+      const r = await t.send({ room: roomOf(userId), text: `${title}\n\n${body}`,
+        ...(matchId ? { buttons: evacTongroButtons(matchId, "offered") } : {}) });
+      return !!r?.ok || !!r?.ref;
+    } catch { return false; }
+  }
   await ensureTgTables(db);
   const link = await db.prepare("SELECT chat_id FROM onda_tg_links WHERE user_id = ?").bind(userId).first<{ chat_id: string }>();
   if (!link) return false;
@@ -79,7 +93,15 @@ export async function notifyHelper(db: D1Database, env: TgEnv, userId: string, t
 
 // ── 연결: 앱에서 «텔레그램으로 받기» → 1회용 링크(10분) ──
 app.post("/api/evac/telegram/link", requireAuth(), async (c) => {
-  if (!c.env.TELEGRAM_BOT_NAME) return c.json({ error: "telegram not configured" }, 503);
+  if (!c.env.TELEGRAM_BOT_NAME) {
+    // 2026-11-23: 온다 봇(알림 통로)으로 묶는다 — 온다 텔레그램판과 같은 방(u:사용자)
+    const t = tongroOf(c.env as any);
+    if (!t) return c.json({ error: "telegram not configured" }, 503);
+    const u = getUser(c);
+    await c.env.DB.prepare("INSERT OR IGNORE INTO onda_tgc_people (room_key, user_id, kind) VALUES (?, ?, 'helper')").bind(roomOf(u.id), u.id).run().catch(() => {});
+    const { url } = await t.startLink(roomOf(u.id), 1);
+    return c.json({ ok: true, url });
+  }
   const user = getUser(c);
   const code = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
   await c.env.LOCATION_KV.put(`tglink:${code}`, user.id, { expirationTtl: 600 });
