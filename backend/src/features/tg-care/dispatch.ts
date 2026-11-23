@@ -69,8 +69,10 @@ export async function startDispatch(env: TgEnv, requestId: string, o: { elderId:
 /** 어르신 출동 부탁 만들기(텔레그램). 이미 진행 중이면 그 건을 돌려준다. */
 export async function createTgRequest(env: TgEnv, elderId: string, askedBy: string, emergency: boolean,
   later?: (p: Promise<unknown>) => Promise<unknown>, emergencyNotice = false): Promise<{ requestId: string; existing: boolean; queued: number }> {
+  // 진행 중인 출동인지는 요청 상태로도 본다 — 마침 알림(syncStatus)을 답 뒤로 미루면서 출동 줄 상태가 잠깐 늦게 바뀔 수 있다(2026-11-24 예행에서 찾음)
   const live = await env.DB.prepare(
-    "SELECT request_id FROM onda_tgc_dispatch WHERE elder_id = ? AND state IN ('offering','exhausted','accepted') LIMIT 1").bind(elderId).first<{ request_id: string }>();
+    `SELECT d.request_id FROM onda_tgc_dispatch d JOIN onda_requests r ON r.id = d.request_id
+      WHERE d.elder_id = ? AND d.state IN ('offering','exhausted','accepted') AND r.status NOT IN ('completed','cancelled') LIMIT 1`).bind(elderId).first<{ request_id: string }>();
   if (live) {
     if (emergency) { const p = markEmergency(env, live.request_id, askedBy); await (later ? later(p) : p); }
     return { requestId: live.request_id, existing: true, queued: 0 };

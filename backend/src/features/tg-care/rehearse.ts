@@ -48,7 +48,6 @@ app.post("/api/tg/rehearse/setup", async (c) => {
 //  POST /api/tg/rehearse/evac {stage:"prep", helperId} → 명단·예보(담당 도우미 사전 점검 알림) / {stage:"start"} → 대피 시작(출동 부탁)
 app.post("/api/tg/rehearse/evac", async (c) => {
   if (!(await okKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
-  const env = c.env as any;
   const b = await c.req.json<{ stage?: string; helperId?: string }>().catch(() => ({} as any));
   const helper = b.helperId ? await c.env.DB.prepare("SELECT u.name FROM onda_tgc_rehearsal r JOIN onda_users u ON u.id = r.user_id WHERE r.user_id = ?").bind(b.helperId).first<{ name: string }>() : null;
   const now = Math.floor(Date.now() / 1000);
@@ -61,9 +60,11 @@ app.post("/api/tg/rehearse/evac", async (c) => {
     const p = await call("/api/evac/people", { method: "POST", headers: { Authorization: `Bearer ${adm}`, "Content-Type": "application/json" },
       body: JSON.stringify({ emd_code: REH_EMD, name: "가상대피", mobility: "walk", lat: 35.871, lng: 128.601, helper_id: b.helperId }) });
     if (!p.ok) return c.json({ error: "명단 실패 " + p.status }, 500);
-    if (!env.EVAC_INGEST_KEY) return c.json({ error: "EVAC_INGEST_KEY 없음" }, 503);
+    // 실서버 예보 입구는 열쇠(EVAC_INGEST_KEY)가 없으면 닫혀 있다 — 예행은 입구를 열지 않고, 이 부름에만 쓰는 1회용 열쇠로 안에서 부른다
+    const once = crypto.randomUUID();
+    const callF = (path: string, init: RequestInit) => evacRoutes.request(path, init, { ...c.env, EVAC_INGEST_KEY: once });
     const head = "issued_at,target_day,run,hazard,emd_code,sido,sgg,emd,rank,n,level,already,pop,a65,a80,deadline,shelter_name,shelter_lat,shelter_lon,shelter_km";
-    const f = await call("/api/evac/forecast", { method: "POST", headers: { "Content-Type": "text/csv", "X-Evac-Key": env.EVAC_INGEST_KEY },
+    const f = await callF("/api/evac/forecast", { method: "POST", headers: { "Content-Type": "text/csv", "X-Evac-Key": once },
       body: `${head}\n${new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 16)}+09:00,${day},전날판,큰비,${REH_EMD},가상시,가상구,가상동,40,3482,상위5%,0,2100,980,310,18:00,가상동 경로당,,,` });
     return c.json({ ok: f.ok, alertId, forecast: await f.json().catch(() => null) });
   }

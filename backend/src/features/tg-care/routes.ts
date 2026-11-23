@@ -322,8 +322,8 @@ async function onButton(env: TgEnv, ev: any, later: (p: Promise<unknown>) => Pro
       (p.kind === "family" && await env.DB.prepare("SELECT 1 FROM onda_tgc_family WHERE elder_id = ? AND family_id = ?").bind(elderId, p.user_id).first());
     if (!allowed) return { toast: "누를 수 없는 버튼입니다" };
     const emergency = b === "y";
-    const r = await createTgRequest(env, elderId, p.user_id, emergency);
-    if (emergency) { await t.send({ room: ev.room, text: TXT.call119 }); if (!r.existing) await markEmergency(env, r.requestId, p.user_id); }
+    if (emergency) await t.send({ room: ev.room, text: TXT.call119 }).catch(() => {});   // 119 안내는 먼저, 바로
+    const r = await createTgRequest(env, elderId, p.user_id, emergency, later, emergency);
     const elderRoom = roomOf(elderId);
     if (p.kind === "family" && !r.existing) await sendMany(t, env.DB, [elderRoom], "👨‍👩‍👧 가족이 도우미를 불렀습니다. 곧 연락드립니다.");
     return { toast: r.existing ? "이미 도우미를 부르고 있습니다" : "도우미를 부릅니다",
