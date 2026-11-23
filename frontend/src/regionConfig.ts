@@ -19,6 +19,14 @@ export const REGIONS: FrontRegion[] = [
   { code: 'AE', name: 'UAE', flag: '🇦🇪', currency: 'AED', currencySymbol: 'د.إ', rates: { green: 100, orange: 200, red: 400 }, authProviders: ['google'] },
 ];
 
+// 나라별 긴급 번호 (구급·경찰) — 2026-11-23
+export const EMERGENCY: Record<string, { medical: string; police: string }> = {
+  KR: { medical: '119', police: '112' }, JP: { medical: '119', police: '110' },
+  TH: { medical: '1669', police: '191' }, VN: { medical: '115', police: '113' },
+  ID: { medical: '119', police: '110' }, AE: { medical: '998', police: '999' },
+};
+export function emergencyOf(code?: string) { return EMERGENCY[code || detectRegion()] || EMERGENCY.KR; }
+
 export function detectRegion(): string {
   const saved = localStorage.getItem('onda_region');
   if (saved) return saved;

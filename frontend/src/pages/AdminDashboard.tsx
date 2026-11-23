@@ -27,6 +27,13 @@ export default function AdminDashboard() {
   const [warnedResponders, setWarnedResponders] = useState<any[]>([]);
   const [verificationList, setVerificationList] = useState<any[]>([]);
   const [impact, setImpact] = useState<any>(null);
+  const [certView, setCertView] = useState<{ url: string; pdf: boolean } | null>(null);
+  const openCert = async (userId: string) => {
+    const res = await fetch(`${api.API_URL}/api/admin/cert/${encodeURIComponent(userId)}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) { alert(t('noCert')); return; }
+    const blob = await res.blob(); setCertView({ url: URL.createObjectURL(blob), pdf: blob.type === 'application/pdf' });
+  };
+  const closeCert = () => { if (certView) URL.revokeObjectURL(certView.url); setCertView(null); };
 
   const load = () => {
     if (!token) return;
@@ -114,6 +121,7 @@ export default function AdminDashboard() {
                   <StatusBadge status="pending" />
                 </div>
                 {r.bio && <p className="text-xs text-on-surface-variant mb-2">{r.bio}</p>}
+                <button onClick={() => openCert(r.user_id)} className="w-full mb-2 py-2 bg-surface-high text-on-surface rounded-xl text-xs font-bold">📄 {t('viewCert')}</button>
                 <div className="flex gap-2">
                   <button onClick={() => approve(r.user_id)} className="flex-1 py-2 bg-trust-green text-white rounded-xl text-sm font-bold">{t('approve')}</button>
                   <button onClick={() => suspendR(r.user_id)} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-sm font-bold">{t('suspend')}</button>
@@ -160,7 +168,7 @@ export default function AdminDashboard() {
                   <span className="text-xs bg-secondary-container text-secondary px-2 py-1 rounded-full">{LICENSE_LABELS[l.license_type] || l.license_type}</span>
                 </div>
                 {l.license_number && <p className="text-xs text-on-surface-variant mb-2">{t('licenseNo')}: {l.license_number}</p>}
-                {l.license_photo_url && <img src={l.license_photo_url} alt="license" className="w-full rounded-lg mb-2 max-h-40 object-cover"/>}
+                <button onClick={() => openCert(l.responder_id)} className="w-full mb-2 py-2 bg-surface-high text-on-surface rounded-xl text-xs font-bold">📄 {t('viewCert')}</button>
                 <div className="flex gap-2">
                   <button onClick={() => verifyLicense(l.id)} className="flex-1 py-2 bg-trust-green text-white rounded-xl text-sm font-bold">{t('verifyBtn')}</button>
                   <button onClick={() => rejectLicense(l.id)} className="flex-1 py-2 bg-surface-high text-on-surface-variant rounded-xl text-sm font-bold">{t('rejectBtn')}</button>
@@ -314,6 +322,11 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+      {certView && (
+        <div onClick={closeCert} className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          {certView.pdf ? <iframe src={certView.url} title="certificate" className="w-full h-full bg-white rounded-lg" /> : <img src={certView.url} alt="certificate" className="max-w-full max-h-full rounded-lg" />}
+        </div>
+      )}
     </div>
   );
 }

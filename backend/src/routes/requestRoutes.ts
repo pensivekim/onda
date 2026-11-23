@@ -54,7 +54,10 @@ app.delete("/api/requests/:id", requireAuth(), async (c) => {
   if (request.requester_id !== user.id) return c.json({ error: "Forbidden" }, 403);
   if (request.status !== "pending") return c.json({ error: "Cannot cancel non-pending request" }, 400);
 
-  await c.env.DB.prepare("UPDATE onda_requests SET status = 'cancelled' WHERE id = ?").bind(id).run();
+  await c.env.DB.prepare("UPDATE onda_requests SET status = 'cancelled' WHERE id = ? AND status = 'pending'").bind(id).run();
+  // 2026-11-23: 차례 출동 중이면 멈추고, 부탁받던 도우미의 제안도 닫는다
+  await c.env.DB.prepare("UPDATE onda_matches SET status = 'cancelled' WHERE request_id = ? AND status = 'offered'").bind(id).run();
+  try { await c.env.DB.prepare("UPDATE onda_tgc_dispatch SET state = 'cancelled', cur_match = NULL WHERE request_id = ?").bind(id).run(); } catch { /* 표가 아직 없음 */ }
   return c.json({ ok: true });
 });
 

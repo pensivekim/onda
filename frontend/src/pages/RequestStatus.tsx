@@ -7,6 +7,7 @@ import StatusBadge from '../components/StatusBadge';
 import ChatPanel from '../components/ChatPanel';
 import ReviewPanel from '../components/ReviewPanel';
 import { useLang } from '../i18n';
+import { emergencyOf } from '../regionConfig';
 
 const STEPS = ['pending', 'accepted', 'moving', 'arrived', 'in_progress', 'completed'];
 
@@ -69,14 +70,19 @@ export default function RequestStatus() {
           <div className="bg-surface-low rounded-card p-8 text-center">
             <div className="text-3xl mb-2">🔍</div>
             <p className="text-on-surface-variant text-sm">{t('searching')}</p>
+            <button onClick={async () => { if (token && id && confirm(t('cancelRequest') + '?')) { await api.del(`/api/requests/${id}`, token); load(); } }}
+              className="mt-4 px-5 py-2 rounded-full bg-surface-card text-on-surface-variant text-sm font-semibold">{t('cancelRequest')}</button>
           </div>
         )}
 
         {/* Emergency SOS + Responder Location — during active dispatch */}
         {match && ['accepted','moving','arrived','in_progress'].includes(match.status) && (
           <div className="mt-4 flex gap-3">
-            <a href="tel:112" className="flex-1 py-3 bg-error text-white rounded-xl font-bold text-center text-sm">
-              🚨 {t('sos112')}
+            <a href={`tel:${emergencyOf(req?.region).medical}`} className="flex-1 py-3 bg-error text-white rounded-xl font-bold text-center text-sm">
+              🚑 {t('sosMedical')} {emergencyOf(req?.region).medical}
+            </a>
+            <a href={`tel:${emergencyOf(req?.region).police}`} className="flex-1 py-3 bg-error text-white rounded-xl font-bold text-center text-sm">
+              🚨 {t('sosPolice')} {emergencyOf(req?.region).police}
             </a>
             <button onClick={async () => {
               const d = await api.get(`/api/dispatch/${id}/responder-location`, token!);

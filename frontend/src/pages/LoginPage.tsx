@@ -21,7 +21,8 @@ export default function LoginPage() {
 
   // Handle OAuth callback tokens
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
+    // 2026-11-23: 서버가 토큰을 주소 «#» 뒤로 넘김(서버 기록·다른 사이트로 새지 않게). 예전 «?» 방식도 받음
+    const params = new URLSearchParams(location.hash.slice(1) || location.search);
     const token = params.get('token');
     const refreshToken = params.get('refresh_token');
     if (token && refreshToken) {

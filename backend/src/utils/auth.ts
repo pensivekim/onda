@@ -34,7 +34,8 @@ export function requireAuth() {
     if (!token) return c.json({ error: "Authentication required" }, 401);
 
     const payload = await verifyJwt(token, c.env.JWT_SECRET);
-    if (!payload || !payload.sub) return c.json({ error: "Invalid token" }, 401);
+    // 2026-11-23: 30일짜리 «새로고침 열쇠»로는 들어오지 못하게 (전에는 그대로 통과)
+    if (!payload || !payload.sub || payload.type === "refresh") return c.json({ error: "Invalid token" }, 401);
 
     (c as any).set("user", {
       id: payload.sub as string,
@@ -53,7 +54,7 @@ export function requireAdmin() {
     if (!token) return c.json({ error: "Authentication required" }, 401);
 
     const payload = await verifyJwt(token, c.env.JWT_SECRET);
-    if (!payload || !payload.sub) return c.json({ error: "Invalid token" }, 401);
+    if (!payload || !payload.sub || payload.type === "refresh") return c.json({ error: "Invalid token" }, 401);
     if (payload.role !== "admin") return c.json({ error: "Admin only" }, 403);
 
     (c as any).set("user", {

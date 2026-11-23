@@ -5,8 +5,10 @@
 import { Hono } from "hono";
 import { ensureAllTables } from "../../utils/db";
 import { mapDetectionToGrade, type DetectionInput } from "./grade";
+import { verifySigned } from "../../utils/signed";
+import { startDispatch } from "../tg-care/dispatch";
 
-type Bindings = { DB: D1Database; LOCATION_KV: KVNamespace };
+type Bindings = { DB: D1Database; LOCATION_KV: KVNamespace; HI_ONDA_SECRET?: string };
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -34,13 +36,15 @@ const TYPE_MAP: Record<string, string> = {
 
 // POST /api/detect/dispatch — 감지 이벤트(hi/68/스텁) → 출동요청 + 등급 + 근접 매칭
 app.post("/api/detect/dispatch", async (c) => {
+  // 2026-11-23 보안: 서명(HI_ONDA_SECRET) 필수 — 전에는 아무나 출동을 만들 수 있었다. 매칭은 차례 출동 엔진으로
+  const raw = await c.req.text();
+  const signed = await verifySigned(raw, c.req.header("x-hi-ts"), c.req.header("x-hi-sig"), (c.env as any).HI_ONDA_SECRET, c.env.LOCATION_KV);
+  if (!signed) return c.json({ error: "forbidden" }, 403);
   await ensureAllTables(c.env.DB);
-  const body = await c.req.json<
-    DetectionInput & {
+  const body = signed as DetectionInput & {
       facility_id?: string; facility_name?: string;
       lat?: number; lng?: number; address?: string; phone?: string; source_system?: string;
-    }
-  >();
+    };
 
   const triage = mapDetectionToGrade(body);
   const requestId = crypto.randomUUID();
@@ -66,27 +70,11 @@ app.post("/api/detect/dispatch", async (c) => {
     "INSERT INTO onda_admin_logs (admin_id, action, target_type, target_id, memo) VALUES ('system', 'detect_dispatch', ?, ?, ?)"
   ).bind(body.event_type, requestId, JSON.stringify({ grade: triage.grade, urgency: triage.urgency, call119: triage.call119 })).run();
 
-  // 등급 필터 근접 매칭(5km)
-  let candidateCount = 0;
-  const matched: Array<{ user_id: string; grade: string; km: number }> = [];
-  if (reqLat !== 0 && reqLng !== 0) {
-    const responders = await c.env.DB.prepare(
-      `SELECT user_id, grade FROM onda_responders WHERE status = 'approved' AND available = 1 AND grade IN ${GRADE_IN[triage.grade]}`
-    ).all<{ user_id: string; grade: string }>();
-    for (const r of responders.results) {
-      const locStr = await c.env.LOCATION_KV.get(`loc:${r.user_id}`);
-      if (!locStr) continue;
-      const [lat, lng] = locStr.split(",").map(Number);
-      const km = haversine(reqLat, reqLng, lat, lng);
-      if (km <= 5) {
-        await c.env.DB.prepare(
-          "INSERT INTO onda_matches (id, request_id, responder_id, status) VALUES (?, ?, ?, 'offered')"
-        ).bind(crypto.randomUUID(), requestId, r.user_id).run();
-        candidateCount++;
-        matched.push({ user_id: r.user_id, grade: r.grade, km: Math.round(km * 100) / 100 });
-      }
-    }
-  }
+  // 차례 출동 (가까운 분부터 한 분씩) — 2026-11-23
+  const candidateCount = (reqLat && reqLng)
+    ? await startDispatch(c.env as any, requestId, { elderId: "detect_system", askedBy: "detect_system", emergency: triage.urgency === "emergency", who: "감지 장치" })
+    : 0;
+  const matched: never[] = [];
 
   return c.json({
     ok: true, requestId,

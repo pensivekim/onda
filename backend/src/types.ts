@@ -20,4 +20,5 @@ export interface Env {
   OPENAI_API_KEY: string;
   // 2단계 표준 phoneHash 다리 — 생태계 공용 솔트(qr와 동일값 주입). 미설정 시 다리 graceful no-op. 절대 변경 금지.
   CANONICAL_PHONE_SALT?: string;
+  HI_ONDA_SECRET?: string;   // 말벗·감지 장치 → 온다 자동 출동 서명 (2026-11-23)
 }

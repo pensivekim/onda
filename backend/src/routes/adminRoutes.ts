@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { ensureAllTables } from "../utils/db";
-import { requireAdmin } from "../utils/auth";
+import { requireAdmin, getUser } from "../utils/auth";
 import { REGIONS, getRegion, formatCurrency } from "../utils/regions";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -330,6 +330,21 @@ app.get("/api/admin/sponsors/:id/usage", requireAdmin(), async (c) => {
     "SELECT u.*, r.address, r.type FROM onda_sponsor_usage u LEFT JOIN onda_requests r ON r.id = u.request_id WHERE u.sponsor_id = ? ORDER BY u.created_at DESC"
   ).bind(sponsorId).all();
   return c.json({ usage: result.results });
+});
+
+// GET /api/admin/cert/:userId — 도우미 자격증 사진 보기 (관리자만, 2026-11-23)
+// 사진은 공개 주소 없이 저장소에만 두고, 관리자 로그인으로만 꺼내 본다. 본 사람을 기록에 남긴다
+app.get("/api/admin/cert/:userId", requireAdmin(), async (c) => {
+  const row = await c.env.DB.prepare("SELECT cert_photo_url FROM onda_responders WHERE user_id = ?").bind(c.req.param("userId")).first<{ cert_photo_url: string }>();
+  const key = (row?.cert_photo_url || "").startsWith("r2:") ? row!.cert_photo_url.slice(3) : "";
+  if (!key) return c.json({ error: "not found" }, 404);
+  const obj = await c.env.CERT_BUCKET.get(key);
+  if (!obj) return c.json({ error: "not found" }, 404);
+  const admin = getUser(c);
+  await c.env.DB.prepare("INSERT INTO onda_admin_logs (admin_id, action, target_type, target_id, memo) VALUES (?, 'view_cert', 'responder', ?, '')")
+    .bind(admin.id, c.req.param("userId")).run();
+  return new Response(obj.body, { headers: { "Content-Type": obj.httpMetadata?.contentType || "application/octet-stream",
+    "Cache-Control": "no-store", "Content-Disposition": "inline", "X-Content-Type-Options": "nosniff" } });
 });
 
 // ===== Phase 3: 공개 API (지자체/스폰서 현황 — 마케팅용) =====

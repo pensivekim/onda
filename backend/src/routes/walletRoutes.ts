@@ -190,8 +190,9 @@ app.post("/api/wallet/paddle-webhook", async (c) => {
   const paddleSig = c.req.header("paddle-signature") || "";
   const webhookSecret = c.env.PADDLE_WEBHOOK_SECRET;
 
-  // Signature verification (same pattern as hi.genomic.cc)
-  if (webhookSecret && paddleSig) {
+  // 2026-11-23 보안: 비밀·서명이 없으면 거절 (전에는 서명 머리말만 빼면 누구나 지갑을 채울 수 있었음), 5분 안, 같은 거래 한 번만
+  if (!webhookSecret || !paddleSig) return c.json({ error: "invalid signature" }, 401);
+  {
     const parts = Object.fromEntries(paddleSig.split(";").map(p => { const [k, v] = p.split("="); return [k, v]; }));
     const ts = parts.ts || "";
     const h1 = parts.h1 || "";
@@ -200,7 +201,8 @@ app.post("/api/wallet/paddle-webhook", async (c) => {
     const key = await crypto.subtle.importKey("raw", encoder.encode(webhookSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(signedPayload)));
     const computed = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
-    if (computed !== h1) return c.json({ error: "invalid signature" }, 401);
+    if (!h1 || computed.length !== h1.length || [...computed].reduce((d, ch, i) => d | (ch.charCodeAt(0) ^ h1.charCodeAt(i)), 0)) return c.json({ error: "invalid signature" }, 401);
+    if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return c.json({ error: "stale" }, 401);
   }
 
   const event = JSON.parse(body);
@@ -215,7 +217,8 @@ app.post("/api/wallet/paddle-webhook", async (c) => {
     const userId = customData.onda_user_id;
     const chargeAmount = parseInt(customData.charge_amount || "0");
 
-    if (userId && chargeAmount > 0) {
+    const dup = await db.prepare("SELECT 1 FROM onda_wallet_transactions WHERE memo = ?").bind(`paddle:${txn.id}`).first();
+    if (userId && chargeAmount > 0 && !dup) {
       await db.prepare(
         "INSERT INTO onda_wallets (user_id, balance, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?, updated_at = datetime('now')"
       ).bind(userId, chargeAmount, chargeAmount).run();

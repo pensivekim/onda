@@ -7,7 +7,7 @@ import { useLang } from '../i18n';
 
 export default function ResponderHome() {
   const { user, token } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [responder, setResponder] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
   const [regForm, setRegForm] = useState({ bio: '', phone: '', grade: 'green', criminalCheck: false, sexOffenderCheck: false, serviceOath: false });
@@ -160,7 +160,7 @@ export default function ResponderHome() {
               <StatusBadge status={m.status} />
             </div>
             <p className="text-xs text-on-surface-variant">{m.address || m.description || '-'}</p>
-            {m.urgency === 'emergency' && <span className="text-xs bg-error-container text-error px-2 py-0.5 rounded-full mt-1 inline-block">Emergency</span>}
+            {m.urgency === 'emergency' && <span className="text-xs bg-error-container text-error px-2 py-0.5 rounded-full mt-1 inline-block">{lang === 'ko' ? '긴급' : 'Emergency'}</span>}
             {m.status === 'offered' && (
               <div className="flex gap-2 mt-3">
                 <button onClick={async () => { await api.post(`/api/matches/${m.id}/accept`, {}, token!); load(); }}
