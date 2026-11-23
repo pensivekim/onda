@@ -8,7 +8,7 @@ const T = join(homedir(), ".cf-tokens");
 const rd = (f) => readFileSync(join(T, f), "utf8").trim();
 const env = {
   onda: "https://onda-backend.pensive-kim.workers.dev", tongro: "https://alim-tongro.ansimservice.workers.dev",
-  tongroAdmin: JSON.parse(rd("alim-tongro.json")).adminToken, rehToken: rd("onda_reh.token"), botToken: rd("onda_bot.token"),
+  tongroAdmin: JSON.parse(rd("alim-tongro.json")).adminToken, rehToken: rd("onda_reh.token"), botToken: rd("onda_bot.token"), hiSecret: JSON.parse(rd("onda-hi.json")).secret,
 };
 if (process.env.ONDA_BASE) env.onda = process.env.ONDA_BASE;
 const out = [];

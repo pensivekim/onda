@@ -11,9 +11,9 @@ async function initData(botToken, user) {
   const k2 = await crypto.subtle.importKey("raw", sec, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   p.set("hash", hex(await crypto.subtle.sign("HMAC", k2, enc.encode(dcs)))); return p.toString();
 }
-export const IDS = { ops: -990000000001, opsFrom: 990000000099, h1: 990000000011, h2: 990000000012, elder: 990000000021, fam: 990000000031 };
+export const IDS = { ops: -990000000001, opsFrom: 990000000099, h1: 990000000011, h2: 990000000012, elder: 990000000021, elder2: 990000000022, fam: 990000000031 };
 
-export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, fetchImpl = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms)), log = console.log }) {
+export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, hiSecret, fetchImpl = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms)), log = console.log }) {
   const steps = [];
   const ok = (cond, msg) => { if (!cond) throw new Error("✖ " + msg); };
   const step = (s) => { steps.push(s); log("✔ " + s); };
@@ -128,6 +128,24 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   await press(IDS.h2, "출발했어요"); await press(IDS.h2, "도착했어요"); await press(IDS.h2, "돌봄 시작"); await press(IDS.h2, "마쳤어요");
   ok((await texts(IDS.fam)).filter((t) => t.includes("마쳤습니다")).length >= 2, "두 번째 마침 알림 없음");
   step("가족 «위급» → 119 안내·상황실 위급 → 담당 «못 갑니다» → 다음 분 수락 → 마침");
+
+  // 9 말벗 다리: 말벗 기기 코드로 묶인 가상 어르신 → 말벗 «쓰러짐» 경보(보호자 무응답) → 온다 위급 차례 출동
+  if (hiSecret) {
+    const el2 = await ondaApi("POST", "/api/tg/elders", { name: "가상말순", address: "가상시 나동 3", lat: 35.871, lng: 128.601, hi_code: "REHX01" }, H1);
+    ok(el2.code === 200, "말벗 어르신 등록 실패");
+    await start(el2.j.url, IDS.elder2, "가상말순");
+    const body = JSON.stringify({ code: "REHX01", type: "fall", alert_key: "reh|fall|" + Date.now() });
+    const ts = String(Math.floor(Date.now() / 1000));
+    const k = await crypto.subtle.importKey("raw", enc.encode(hiSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = hex(await crypto.subtle.sign("HMAC", k, enc.encode(ts + "." + hex(await crypto.subtle.digest("SHA-256", enc.encode(body))))));
+    const bad = await fetchImpl(onda + "/api/tg/hi-alert", { method: "POST", body, headers: { "content-type": "application/json", "x-hi-ts": ts, "x-hi-sig": "0".repeat(64) } });
+    ok(bad.status === 403, "서명 틀린 말벗 경보가 통과함");
+    const hr = await j(await fetchImpl(onda + "/api/tg/hi-alert", { method: "POST", body, headers: { "content-type": "application/json", "x-hi-ts": ts, "x-hi-sig": sig } }));
+    ok(hr.code === 200 && hr.j.ok && !hr.j.existing, "말벗 경보 실패 " + JSON.stringify(hr.j));
+    ok(await has(IDS.ops, "말벗 감지"), "예행 상황실 «말벗 감지» 없음");
+    ok((await texts(IDS.h1)).some((t) => t.includes("[위급]") && t.includes("가○○")) || (await texts(IDS.h2)).some((t) => t.includes("[위급]")), "도우미에게 위급 출동 부탁 없음");
+    step("말벗 «쓰러짐» 경보 → 서명 확인 → 온다 위급 차례 출동 · 상황실 «말벗 감지»");
+  }
 
   await pull();
   const chats = [...new Set(rows.map((x) => x.chat_id))];
