@@ -144,7 +144,7 @@ app.get("/api/matches/offered", requireAuth(), async (c) => {
   await ensureAllTables(c.env.DB);
   const user = getUser(c);
   const result = await c.env.DB.prepare(
-    `SELECT m.*, r.type, r.address, r.description, r.urgency, CASE WHEN r.source = 'evac_forecast' THEN '다올 대피' ELSE u.name END as requester_name /* 2026-10-26: 대피 출동은 어르신 실명 대신 */
+    `SELECT m.*, r.type, CASE WHEN m.status = 'offered' THEN NULL ELSE r.address END AS address /* 2026-11-24: 주소는 수락한 분에게만(텔레그램과 같게) */, r.description, r.urgency, CASE WHEN r.source = 'evac_forecast' THEN '다올 대피' ELSE u.name END as requester_name /* 2026-10-26: 대피 출동은 어르신 실명 대신 */
      FROM onda_matches m
      JOIN onda_requests r ON r.id = m.request_id
      LEFT JOIN onda_users u ON u.id = r.requester_id
@@ -159,7 +159,7 @@ app.get("/api/matches/:id", requireAuth(), async (c) => {
   await ensureAllTables(c.env.DB);
   const matchId = c.req.param("id");
   const match = await c.env.DB.prepare(
-    `SELECT m.*, r.address, r.description, r.type, r.urgency, r.requester_id, CASE WHEN r.source = 'evac_forecast' THEN '다올 대피' ELSE u.name END as requester_name /* 2026-10-26: 대피 출동은 어르신 실명 대신 */
+    `SELECT m.*, CASE WHEN m.status = 'offered' THEN NULL ELSE r.address END AS address /* 2026-11-24: 주소는 수락한 분에게만 */, r.description, r.type, r.urgency, r.requester_id, CASE WHEN r.source = 'evac_forecast' THEN '다올 대피' ELSE u.name END as requester_name /* 2026-10-26: 대피 출동은 어르신 실명 대신 */
      FROM onda_matches m
      JOIN onda_requests r ON r.id = m.request_id
      LEFT JOIN onda_users u ON u.id = r.requester_id
