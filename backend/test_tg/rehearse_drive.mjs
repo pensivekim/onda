@@ -137,6 +137,24 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   ok((await texts(IDS.fam)).filter((t) => t.includes("마쳤습니다")).length >= 2, "두 번째 마침 알림 없음");
   step("가족 «위급» → 119 안내·상황실 위급 → 담당 «못 갑니다» → 다음 분 수락 → 마침");
 
+  // 8-2 어려운 길: 아무도 못 받음 → 상황실 «직접 연락» + 어르신·가족 «상황실이 연락» → 상황실 «다시 부탁하기» (2026-11-24 더함)
+  {
+    const mx = await mark();
+    await say(IDS.elder, "🆘 도와주세요");
+    await press(IDS.elder, "아니요", 8, mx);
+    ok(await hasAfter(mx, IDS.h1, "1번째"), "아무도 길: 담당 도우미에게 안 감");
+    await press(IDS.h1, "못 갑니다", 8, mx);
+    ok(await hasAfter(mx, IDS.h2, "2번째"), "아무도 길: 다음 도우미에게 안 감");
+    await press(IDS.h2, "못 갑니다", 8, mx);
+    ok(await hasAfter(mx, IDS.ops, "모두 못 받으셨습니다"), "아무도 길: 상황실 «직접 연락» 알림 없음");
+    ok(await hasAfter(mx, IDS.fam, "상황실에서 곧 연락"), "아무도 길: 가족 안내 없음");
+    ok(await hasAfter(mx, IDS.elder, "119"), "아무도 길: 어르신 119 안내 없음");
+    const my = await mark();
+    await press(IDS.ops, "다시 부탁하기", 8, mx);
+    ok(await hasAfter(my, IDS.ops, "다시 부탁") || await hasAfter(my, IDS.ops, "모두 못 받으셨습니다"), "아무도 길: «다시 부탁하기» 반응 없음");
+    step("아무도 못 받음 → 상황실 직접 연락·가족·어르신 안내 → 상황실 «다시 부탁하기»");
+  }
+
   // 9 다올(이웃대피): 가상 읍면동 예보 → 담당 도우미 사전 점검 → 대피 시작 → 수락·방문·모시고 출발·대피소 도착
   {
     const pr = await ondaApi("POST", "/api/tg/rehearse/evac", { stage: "prep", helperId: hB.id }, R);
