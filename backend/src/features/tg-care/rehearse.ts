@@ -6,6 +6,8 @@
 import { Hono } from "hono";
 import { ensureAllTables } from "../../utils/db";
 import { type TgEnv, tg, ensureTgCareTables, roomOf, opsRoom, REH_OPS_PREFIX } from "./core";
+import { signToken } from "../../utils/auth";
+import { evacRoutes, REH_EMD } from "../evac-dispatch/evacRoutes";
 
 const app = new Hono<{ Bindings: TgEnv }>();
 const enc = new TextEncoder();
@@ -42,6 +44,36 @@ app.post("/api/tg/rehearse/setup", async (c) => {
   return c.json({ ok: true, ops: { room: opsRoom(opsName), url: ops.url }, helpers });
 });
 
+// 다올(이웃대피) 예행 — 가상 읍면동 9999990 에 가상 어르신 한 분, 예보, 대피 시작. 기존 다올 입구를 안에서 그대로 부른다
+//  POST /api/tg/rehearse/evac {stage:"prep", helperId} → 명단·예보(담당 도우미 사전 점검 알림) / {stage:"start"} → 대피 시작(출동 부탁)
+app.post("/api/tg/rehearse/evac", async (c) => {
+  if (!(await okKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
+  const env = c.env as any;
+  const b = await c.req.json<{ stage?: string; helperId?: string }>().catch(() => ({} as any));
+  const helper = b.helperId ? await c.env.DB.prepare("SELECT u.name FROM onda_tgc_rehearsal r JOIN onda_users u ON u.id = r.user_id WHERE r.user_id = ?").bind(b.helperId).first<{ name: string }>() : null;
+  const now = Math.floor(Date.now() / 1000);
+  const adm = await signToken({ sub: "reh_admin", role: "admin", name: "예행", type: "access", iat: now, exp: now + 60 }, c.env.JWT_SECRET);   // 안에서만 쓰는 1분짜리
+  const call = (path: string, init: RequestInit) => evacRoutes.request(path, init, c.env);
+  const day = new Date(Date.now() + 9 * 3600e3 + 86400e3).toISOString().slice(0, 10);
+  const alertId = `${day}|큰비|${REH_EMD}`;
+  if (b.stage === "prep") {
+    if (!helper?.name?.startsWith("가상")) return c.json({ error: "예행 도우미만" }, 400);
+    const p = await call("/api/evac/people", { method: "POST", headers: { Authorization: `Bearer ${adm}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ emd_code: REH_EMD, name: "가상대피", mobility: "walk", lat: 35.871, lng: 128.601, helper_id: b.helperId }) });
+    if (!p.ok) return c.json({ error: "명단 실패 " + p.status }, 500);
+    if (!env.EVAC_INGEST_KEY) return c.json({ error: "EVAC_INGEST_KEY 없음" }, 503);
+    const head = "issued_at,target_day,run,hazard,emd_code,sido,sgg,emd,rank,n,level,already,pop,a65,a80,deadline,shelter_name,shelter_lat,shelter_lon,shelter_km";
+    const f = await call("/api/evac/forecast", { method: "POST", headers: { "Content-Type": "text/csv", "X-Evac-Key": env.EVAC_INGEST_KEY },
+      body: `${head}\n${new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 16)}+09:00,${day},전날판,큰비,${REH_EMD},가상시,가상구,가상동,40,3482,상위5%,0,2100,980,310,18:00,가상동 경로당,,,` });
+    return c.json({ ok: f.ok, alertId, forecast: await f.json().catch(() => null) });
+  }
+  if (b.stage === "start") {
+    const r = await call(`/api/evac/alerts/${encodeURIComponent(alertId)}/start`, { method: "POST", headers: { Authorization: `Bearer ${adm}`, "Content-Type": "application/json" }, body: "{}" });
+    return c.json({ ok: r.ok, alertId, start: await r.json().catch(() => null) });
+  }
+  return c.json({ error: "stage = prep | start" }, 400);
+});
+
 // 지울 때 볼 칸 — 사람 번호·요청 번호가 들어가는 칸 이름
 const PERSON_COLS = ["user_id", "requester_id", "responder_id", "elder_id", "family_id", "enrolled_by", "asked_by", "reviewer_id", "reviewee_id", "sender_id", "target_id", "reporter_id", "helper_id"];
 const REQ_COLS = ["request_id"];
@@ -59,11 +91,18 @@ app.post("/api/tg/rehearse/clear", async (c) => {
   const family = elders.length ? await col(`SELECT family_id AS v FROM onda_tgc_family WHERE elder_id IN (${ph(elders.length)})`, ...elders) : [];
   const people = [...new Set([...helpers, ...elders, ...family])];
   if (!people.length) {
+    try { await db.prepare("DELETE FROM onda_evac_tasks WHERE alert_id IN (SELECT id FROM onda_evac_alerts WHERE emd_code = ?)").bind(REH_EMD).run(); await db.prepare("DELETE FROM onda_evac_alerts WHERE emd_code = ?").bind(REH_EMD).run(); await db.prepare("DELETE FROM onda_evac_people WHERE emd_code = ?").bind(REH_EMD).run(); } catch {}
     const o = await db.prepare(`DELETE FROM onda_tgc_people WHERE room_key LIKE '${REH_OPS_PREFIX}%'`).run();
     return c.json({ ok: true, people: 0, ops: o.meta?.changes ?? 0 });
   }
-  const reqs = await col(`SELECT id AS v FROM onda_requests WHERE requester_id IN (${ph(people.length)})
+  let reqs = await col(`SELECT id AS v FROM onda_requests WHERE requester_id IN (${ph(people.length)})
     UNION SELECT request_id AS v FROM onda_tgc_dispatch WHERE elder_id IN (${ph(people.length)})`, ...people, ...people);
+  // 다올 예행(가상 읍면동) 대피 요청·칸·명단·경보
+  let evac: string[] = [];
+  try {
+    evac = await col(`SELECT t.request_id AS v FROM onda_evac_tasks t JOIN onda_evac_alerts a ON a.id = t.alert_id WHERE a.emd_code = ? AND t.request_id IS NOT NULL`, REH_EMD);
+    reqs = [...new Set([...reqs, ...evac])];
+  } catch {}
   const matches = reqs.length ? await col(`SELECT id AS v FROM onda_matches WHERE request_id IN (${ph(reqs.length)})`, ...reqs) : [];
   const tables = (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'onda_%'").all<{ name: string }>()).results.map((r) => r.name);
   const removed: Record<string, number> = {};
@@ -88,6 +127,12 @@ app.post("/api/tg/rehearse/clear", async (c) => {
   await del("onda_tgc_people", "room_key", people.map(roomOf));
   const o = await db.prepare(`DELETE FROM onda_tgc_people WHERE room_key LIKE '${REH_OPS_PREFIX}%'`).run();
   removed.ops_rooms = o.meta?.changes ?? 0;
+  try {
+    const t1 = await db.prepare("DELETE FROM onda_evac_tasks WHERE alert_id IN (SELECT id FROM onda_evac_alerts WHERE emd_code = ?)").bind(REH_EMD).run();
+    const t2 = await db.prepare("DELETE FROM onda_evac_alerts WHERE emd_code = ?").bind(REH_EMD).run();
+    const t3 = await db.prepare("DELETE FROM onda_evac_people WHERE emd_code = ?").bind(REH_EMD).run();
+    removed.evac = (t1.meta?.changes ?? 0) + (t2.meta?.changes ?? 0) + (t3.meta?.changes ?? 0);
+  } catch {}
   await del("onda_users", "id", people);
   for (const id of people) { try { await c.env.LOCATION_KV.delete(`loc:${id}`); } catch {} }
   return c.json({ ok: true, people: people.length, requests: reqs.length, matches: matches.length, removed });

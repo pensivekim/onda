@@ -129,6 +129,20 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   ok((await texts(IDS.fam)).filter((t) => t.includes("마쳤습니다")).length >= 2, "두 번째 마침 알림 없음");
   step("가족 «위급» → 119 안내·상황실 위급 → 담당 «못 갑니다» → 다음 분 수락 → 마침");
 
+  // 9 다올(이웃대피): 가상 읍면동 예보 → 담당 도우미 사전 점검 → 대피 시작 → 수락·방문·모시고 출발·대피소 도착
+  {
+    const pr = await ondaApi("POST", "/api/tg/rehearse/evac", { stage: "prep", helperId: hB.id }, R);
+    ok(pr.code === 200 && pr.j.ok, "다올 예보 넣기 실패 " + JSON.stringify(pr.j));
+    ok(await has(IDS.h2, "사전 점검"), "담당 도우미 사전 점검 알림 없음");
+    const sr = await ondaApi("POST", "/api/tg/rehearse/evac", { stage: "start" }, R);
+    ok(sr.code === 200 && sr.j.ok, "대피 시작 실패 " + JSON.stringify(sr.j));
+    ok(await has(IDS.h2, "대피"), "도우미 대피 출동 부탁 없음");
+    await press(IDS.h2, "제가 가겠습니다");
+    await press(IDS.h2, "출발했어요"); await press(IDS.h2, "댁에 도착했어요"); await press(IDS.h2, "모시고 출발해요"); await press(IDS.h2, "대피소에 도착했어요");
+    ok((await to(IDS.h2)).some((x) => (x.b.text || "").includes("대피 완료")), "대피 완료 기록 안내 없음");
+    step("다올: 가상 읍면동 예보 → 사전 점검 → 대피 시작 → 수락·방문·모시고 출발·대피소 도착");
+  }
+
   // 9 말벗 다리: 말벗 기기 코드로 묶인 가상 어르신 → 말벗 «쓰러짐» 경보(보호자 무응답) → 온다 위급 차례 출동
   if (hiSecret) {
     const el2 = await ondaApi("POST", "/api/tg/elders", { name: "가상말순", address: "가상시 나동 3", lat: 35.871, lng: 128.601, hi_code: "REHX01" }, H1);

@@ -20,6 +20,9 @@ import {
 import type { Grade } from "../detect-dispatch/grade";
 
 type Bindings = TgEnv & { EVAC_INGEST_KEY?: string };
+/** 예행 전용 가상 읍면동 코드 — 실제 행정 코드(10자리)와 겹치지 않음 */
+export const REH_EMD = "9999990";
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 const MOBILITY = new Set<Mobility>(["walk", "assist", "wheelchair", "bed"]);
@@ -185,9 +188,9 @@ app.post("/api/evac/alerts/:id/start", requireAdmin(), async (c) => {
 
   // 도우미 상태(승인·대기 중) + 마지막 위치
   const resp = await c.env.DB.prepare(
-    // 예행(2026-11-23): «가상» 도우미는 실제 대피 부탁에서 뺀다
-    "SELECT r.user_id, r.grade FROM onda_responders r JOIN onda_users u ON u.id = r.user_id WHERE r.status = 'approved' AND r.available = 1 AND u.name NOT LIKE '가상%'"
-  ).all<{ user_id: string; grade: Grade }>();
+    // 예행(2026-11-23·24): «가상» 도우미는 실제 대피 부탁에서 빼고, 예행 읍면동(9999990)은 «가상» 도우미에게만
+    "SELECT r.user_id, r.grade FROM onda_responders r JOIN onda_users u ON u.id = r.user_id WHERE r.status = 'approved' AND r.available = 1 AND (CASE WHEN u.name LIKE '가상%' THEN 1 ELSE 0 END) = ?"
+  ).bind(alert.emd_code === REH_EMD ? 1 : 0).all<{ user_id: string; grade: Grade }>();
   const helpers: HelperState[] = [];
   for (const r of resp.results) {
     const loc = await c.env.LOCATION_KV.get(`loc:${r.user_id}`);

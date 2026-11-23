@@ -26,7 +26,7 @@ await adm("/admin/bots", { bot_id: "onda", token: BOT });
 const svc = await adm("/admin/services", { service_id: "onda", name: "온다", bot_id: "onda", callback_url: "https://onda.test/api/tg/tongro", forward_messages: true });
 mf = new Miniflare({ modules: true, scriptPath: "test_tg/out.mjs", compatibilityDate: "2024-09-23", compatibilityFlags: ["nodejs_compat"],
   d1Databases: ["DB"], kvNamespaces: ["LOCATION_KV"], r2Buckets: ["CERT_BUCKET"],
-  bindings: { JWT_SECRET: "jwt", FRONTEND_URL: "https://onda.test", TONGRO_BASE: "https://tongro.test", TONGRO_SECRET: svc.secret, TG_OFFER_SECONDS: "20", TG_REH_TOKEN: REH, HI_ONDA_SECRET: "hi-test-secret" },
+  bindings: { JWT_SECRET: "jwt", FRONTEND_URL: "https://onda.test", TONGRO_BASE: "https://tongro.test", TONGRO_SECRET: svc.secret, TG_OFFER_SECONDS: "20", TG_REH_TOKEN: REH, HI_ONDA_SECRET: "hi-test-secret", EVAC_INGEST_KEY: "evac-key" },
   outboundService: route });
 const db = await mf.getD1Database("DB");
 // 실서버처럼 예전에 만든 표(칸 빠짐)에서 시작 — region·lat·lng·email 등이 없어도 칸을 더해 돌아야 한다
@@ -62,6 +62,8 @@ assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_users WHERE name 
 assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_users WHERE name NOT LIKE '가상%'").first()).n, before, "실제 사람이 지워짐");
 assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_requests").first()).n, 0);
 assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_matches").first()).n, 0);
+assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_evac_alerts").first()).n, 0, "다올 예행 경보 남음");
+assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_evac_people").first()).n, 0, "다올 예행 명단 남음");
 assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM onda_settlements").first()).n, 0);
 assert.ok(await db.prepare("SELECT 1 FROM onda_tgc_people WHERE room_key='ops:main'").first(), "실제 상황실 남음");
 const left = (await tEnv.DB.prepare("SELECT chat_id FROM rooms").all()).results.map((r) => r.chat_id);
