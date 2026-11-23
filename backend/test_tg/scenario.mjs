@@ -56,7 +56,9 @@ const realSend = route;
 const press = async (chat, label) => {
   const f = findBtn(chat, label); assert.ok(f, `${chat} 에 «${label}» 버튼 없음`);
   const row = await tEnv.DB.prepare("SELECT m.message_id FROM buttons b JOIN messages m ON m.ref=b.ref WHERE b.btn_id=?").bind(f.b.callback_data.slice(2)).first();
-  return hook({ callback_query: { id: "q" + uid, data: f.b.callback_data, from: { id: chat > 0 ? chat : 99, first_name: "가상누름" }, message: { message_id: Number(row?.message_id || 0), chat: { id: chat }, text: "(원문)" } } });
+  const r = await hook({ callback_query: { id: "q" + uid, data: f.b.callback_data, from: { id: chat > 0 ? chat : 99, first_name: "가상누름" }, message: { message_id: Number(row?.message_id || 0), chat: { id: chat }, text: "(원문)" } } });
+  await new Promise((ok) => setTimeout(ok, 300));   // 버튼 답 뒤로 미룬 알림(waitUntil)이 끝나기를 기다림
+  return r;
 };
 const tick = async () => (await mf.getWorker()).scheduled({ cron: "* * * * *" });
 const step = (s) => console.log("✔", s);

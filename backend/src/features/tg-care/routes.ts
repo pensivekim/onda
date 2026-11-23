@@ -198,7 +198,11 @@ app.post("/api/tg/tongro", async (c) => {
   await ready(c.env.DB);
   switch (ev.type) {
     case "room_linked": return c.json(await onLinked(c.env, ev));
-    case "button": return c.json(await onButton(c.env, ev));
+    case "button": {
+      // 알림 통로는 8초 안에 답을 받아야 버튼을 바꿔 준다 — 오래 걸리는 알림 보내기는 답 뒤로 미룬다(2026-11-24 예행 7회차에서 찾음)
+      const later = (p: Promise<unknown>) => { const q = p.catch((e) => console.error("[tg-care] later:", e)); try { c.executionCtx.waitUntil(q); } catch { return q; } return Promise.resolve(); };
+      return c.json(await onButton(c.env, ev, later));
+    }
     case "message": await onText(c.env, ev); return c.json({});
     case "location": await onLocation(c.env, ev); return c.json({});
     default: return c.json({});
@@ -300,7 +304,7 @@ const HELPER_SAID: Record<string, string> = {
 };
 
 /** 버튼 눌림. 돌려주는 값으로 통로가 그 메시지를 고친다 {toast, append, buttons} */
-async function onButton(env: TgEnv, ev: any): Promise<Record<string, unknown>> {
+async function onButton(env: TgEnv, ev: any, later: (p: Promise<unknown>) => Promise<unknown> = (p) => p): Promise<Record<string, unknown>> {
   const data = String(ev.data || "");
   const [kind, a, b] = data.split(":");
   const t = tg(env)!;
@@ -351,15 +355,17 @@ async function onButton(env: TgEnv, ev: any): Promise<Record<string, unknown>> {
     if (r.status === 409) return { toast: "다른 분이 먼저 맡았습니다", append: "▶ 다른 분이 먼저 맡았습니다. 고맙습니다.", buttons: null };
     if (!r.ok) return { toast: "다시 눌러 주세요" };
     await env.DB.prepare("UPDATE onda_tgc_dispatch SET state = 'accepted', cur_match = ? WHERE request_id = ?").bind(matchId, m.request_id).run();
-    await syncStatus(env, m.request_id);
-    // 수락한 분에게만 주소·지도
-    const e = await env.DB.prepare("SELECT u.name, u.address, u.lat, u.lng FROM onda_requests r JOIN onda_users u ON u.id = r.requester_id WHERE r.id = ?")
-      .bind(m.request_id).first<{ name: string; address: string; lat: number; lng: number }>();
-    const d = await env.DB.prepare("SELECT emergency FROM onda_tgc_dispatch WHERE request_id = ?").bind(m.request_id).first<{ emergency: number }>();
-    try {
-      await t.send({ room: ev.room, text: `📍 ${e?.name || ""} 어르신 댁: ${e?.address || "(지도 참고)"}` + (d?.emergency ? `\n\n${TXT.helper119}` : "") + `\n\n${TXT.liveHow}` });
-      if (e?.lat && e?.lng) await t.sendLocation(ev.room, e.lat, e.lng);
-    } catch {}
+    await later((async () => {
+      await syncStatus(env, m.request_id);
+      // 수락한 분에게만 주소·지도
+      const e = await env.DB.prepare("SELECT u.name, u.address, u.lat, u.lng FROM onda_requests r JOIN onda_users u ON u.id = r.requester_id WHERE r.id = ?")
+        .bind(m.request_id).first<{ name: string; address: string; lat: number; lng: number }>();
+      const d = await env.DB.prepare("SELECT emergency FROM onda_tgc_dispatch WHERE request_id = ?").bind(m.request_id).first<{ emergency: number }>();
+      try {
+        await t.send({ room: ev.room, text: `📍 ${e?.name || ""} 어르신 댁: ${e?.address || "(지도 참고)"}` + (d?.emergency ? `\n\n${TXT.helper119}` : "") + `\n\n${TXT.liveHow}` });
+        if (e?.lat && e?.lng) await t.sendLocation(ev.room, e.lat, e.lng);
+      } catch {}
+    })());
     return { toast: "맡으셨습니다", append: `▶ ${said("accepted")}`, buttons: btns("accepted") };
   }
   if (kind === "x") {
@@ -371,13 +377,12 @@ async function onButton(env: TgEnv, ev: any): Promise<Record<string, unknown>> {
     const r = await callExisting(`/api/matches/${matchId}/status`, "PATCH", { status: b });
     const after = (await env.DB.prepare("SELECT status FROM onda_matches WHERE id = ?").bind(matchId).first<{ status: string }>())?.status || m.status;
     if (!r.ok || after !== b) return { toast: "기록되지 않았습니다", buttons: btns(after) };
-    await syncStatus(env, m.request_id);
+    await later(syncStatus(env, m.request_id));
     return { toast: "적었습니다", append: `▶ ${said(b)}`, buttons: b === "completed" ? null : btns(b) };
   }
   if (kind === "e") {
     if (!["accepted", "moving", "arrived", "in_progress"].includes(m.status)) return { toast: "지금은 누를 수 없습니다" };
-    await markEmergency(env, m.request_id, p.user_id);
-    await t.send({ room: ev.room, text: TXT.helper119 }).catch(() => {});
+    await later((async () => { await t.send({ room: ev.room, text: TXT.helper119 }).catch(() => {}); await markEmergency(env, m.request_id, p.user_id); })());
     return { toast: "119 안내를 보냈습니다" };
   }
   return { toast: "알 수 없는 버튼" };

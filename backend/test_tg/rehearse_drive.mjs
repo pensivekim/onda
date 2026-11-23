@@ -30,7 +30,12 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   const to = async (chat) => { await pull(); return rows.filter((x) => String(x.chat_id) === String(chat)); };
   const texts = async (chat) => (await to(chat)).map((x) => x.b.text || "").filter(Boolean);
   const has = async (chat, s, tries = 6) => { for (let i = 0; i < tries; i++) { if ((await texts(chat)).some((t) => t.includes(s))) return true; if (i < tries - 1) await wait(700); } return false; };
-  const press = async (chat, label) => {
+  const press = async (chat, label, tries = 8) => {
+    for (let i = 0; i < tries; i++) {   // 버튼 글이 응답 뒤에 늦게 오는 때가 있어 조금 기다리며 다시 본다(2026-11-24 7회차)
+      const hit = (await to(chat)).some((x) => (x.b.reply_markup?.inline_keyboard || []).flat().some((b) => b.text.includes(label)));
+      if (hit) break;
+      await wait(700);
+    }
     const list = (await to(chat)).reverse();
     for (const x of list) for (const b of (x.b.reply_markup?.inline_keyboard || []).flat())
       if (b.text.includes(label) && b.callback_data) {
