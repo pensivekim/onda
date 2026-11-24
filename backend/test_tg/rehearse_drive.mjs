@@ -106,10 +106,17 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   // 6 완료
   await press(IDS.h1, "출발했어요"); ok(await has(IDS.fam, "출발"), "출발 알림 없음");
   await press(IDS.h1, "도착했어요"); ok(await has(IDS.elder, "문을 열어"), "도착 알림 없음");
+  // 6-2 어려운 길(2026-11-24 더함): 도착한 도우미가 «위급해요» → 도우미 119 안내 · 가족·상황실 위급 알림 → 그대로 돌봄 이어감
+  const m6 = await mark();
+  await press(IDS.h1, "위급해요");
+  ok(await hasAfter(m6, IDS.h1, "1 1 9"), "도우미 위급: 도우미 119 안내 없음");
+  ok(await hasAfter(m6, IDS.fam, "위급"), "도우미 위급: 가족 위급 알림 없음");
+  ok(await hasAfter(m6, IDS.ops, "위급"), "도우미 위급: 상황실 위급 알림 없음");
+  ok(!(await hasAfter(m6, IDS.h2, "위급", 1)), "도우미 위급: 다른 도우미에게 위급 알림이 감");
   await press(IDS.h1, "돌봄 시작");
   await press(IDS.h1, "마쳤어요");
   ok(await has(IDS.fam, "마쳤습니다"), "가족 마침 알림 없음");
-  step("출발 → 도착 → 돌봄 → 마침 → 가족 알림");
+  step("출발 → 도착 → (도우미 «위급해요» → 119 안내·가족·상황실) → 돌봄 → 마침 → 가족 알림");
 
   // 7 가족 미니 앱에서 결과 보기
   const fl = await ondaApi("POST", "/api/tg/webapp-login", { initData: await initData(botToken, { id: IDS.fam, first_name: "가상딸" }) });
