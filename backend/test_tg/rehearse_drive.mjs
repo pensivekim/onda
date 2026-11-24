@@ -13,7 +13,7 @@ async function initData(botToken, user) {
 }
 export const IDS = { ops: -990000000001, opsFrom: 990000000099, h1: 990000000011, h2: 990000000012, elder: 990000000021, elder2: 990000000022, fam: 990000000031 };
 
-export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, hiSecret, fetchImpl = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms)), log = console.log }) {
+export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, hiSecret, tick, fetchImpl = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms)), log = console.log }) {
   const steps = [];
   const ok = (cond, msg) => { if (!cond) throw new Error("✖ " + msg); };
   const step = (s) => { steps.push(s); log("✔ " + s); };
@@ -143,8 +143,10 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
     await say(IDS.elder, "🆘 도와주세요");
     await press(IDS.elder, "아니요", 8, mx);
     ok(await hasAfter(mx, IDS.h1, "1번째"), "아무도 길: 담당 도우미에게 안 감");
-    await press(IDS.h1, "못 갑니다", 8, mx);
-    ok(await hasAfter(mx, IDS.h2, "2번째"), "아무도 길: 다음 도우미에게 안 감");
+    // 담당은 아무것도 안 누름 → 부탁 시간(실서버 50초)이 지나고 매분 예약 작업이 다음 분께 넘긴다
+    if (tick) await tick();
+    ok(await hasAfter(mx, IDS.h2, "2번째", tick ? 10 : 220), "시간 지남 길: 다음 도우미에게 안 넘어감");
+    ok((await to(IDS.h1)).some((x) => x.id > mx && (x.b.text || "").includes("시간이 지나")), "시간 지남 길: 담당 도우미 부탁 글이 안 닫힘");
     await press(IDS.h2, "못 갑니다", 8, mx);
     ok(await hasAfter(mx, IDS.ops, "모두 못 받으셨습니다"), "아무도 길: 상황실 «직접 연락» 알림 없음");
     ok(await hasAfter(mx, IDS.fam, "상황실에서 곧 연락"), "아무도 길: 가족 안내 없음");
@@ -152,7 +154,7 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
     const my = await mark();
     await press(IDS.ops, "다시 부탁하기", 8, mx);
     ok(await hasAfter(my, IDS.ops, "다시 부탁") || await hasAfter(my, IDS.ops, "모두 못 받으셨습니다"), "아무도 길: «다시 부탁하기» 반응 없음");
-    step("아무도 못 받음 → 상황실 직접 연락·가족·어르신 안내 → 상황실 «다시 부탁하기»");
+    step("담당 시간 지남 → 다음 분 «못 갑니다» → 아무도 없음 → 상황실 직접 연락·가족·어르신 안내 → 상황실 «다시 부탁하기»");
   }
 
   // 9 다올(이웃대피): 가상 읍면동 예보 → 담당 도우미 사전 점검 → 대피 시작 → 수락·방문·모시고 출발·대피소 도착
