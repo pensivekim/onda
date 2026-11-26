@@ -4,3 +4,6 @@ dist/
 *.log
 .env
 .dev.vars
+텔레그램판/시연_연결.json
+텔레그램판/시연_도우미_QR.png
+텔레그램판/시연_보호자_새링크.json

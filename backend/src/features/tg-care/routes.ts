@@ -34,7 +34,9 @@ async function firstTime(env: TgEnv, sig: string | undefined): Promise<boolean> 
   await env.LOCATION_KV.put(k, "1", { expirationTtl: 600 });
   return true;
 }
-async function ready(db: D1Database) { await ensureAllTables(db); await ensureTgCareTables(db); }
+// 표 만들기는 일꾼(isolate)마다 한 번이면 된다 — 매번 하면 알림 통로 8초 안에 답을 못 하는 때가 있었음(2026-11-26 시연 연결 끊김)
+let readyDone = false;
+async function ready(db: D1Database) { if (readyDone) return; await ensureAllTables(db); await ensureTgCareTables(db); readyDone = true; }
 const notConfigured = (c: any) => c.json({ error: "telegram (alim-tongro) not configured" }, 503);
 
 async function addPerson(db: D1Database, room: string, userId: string | null, kind: string) {
@@ -236,16 +238,22 @@ app.post("/api/tg/tongro", async (c) => {
   const ev = await verifyTongro(body, c.req.header("x-tongro-ts"), c.req.header("x-tongro-sig"), c.env.TONGRO_SECRET);
   if (!ev) return c.json({ error: "forbidden" }, 403);
   if (!(await firstTime(c.env, c.req.header("x-tongro-sig")))) return c.json({ toast: "이미 처리했습니다" });
-  await ready(c.env.DB);
+  // 알림 통로는 8초 안에 답을 받아야 한다 — 표 만들기까지 포함해 뒤에서 돌리고, 5초 안에 못 끝나면 답을 먼저 한다(2026-11-26 시연 연결이 끊긴 일)
+  const bg = <T,>(f: () => Promise<T>, fallback: T): Promise<T> => {
+    const work = ready(c.env.DB).then(f).catch((e) => { console.error("[tg-care] tongro:", ev.type, e); return fallback; });
+    try { c.executionCtx.waitUntil(work); } catch {}
+    return Promise.race([work, new Promise<T>((ok) => setTimeout(() => ok(fallback), 5000))]);
+  };
   switch (ev.type) {
-    case "room_linked": return c.json(await onLinked(c.env, ev));
+    case "room_linked": return c.json(await bg(() => onLinked(c.env, ev), { text: "✅ 연결 완료" }));
     case "button": {
-      // 알림 통로는 8초 안에 답을 받아야 버튼을 바꿔 준다 — 오래 걸리는 알림 보내기는 답 뒤로 미룬다(2026-11-24 예행 7회차에서 찾음)
+      // 오래 걸리는 알림 보내기는 답 뒤로 미룬다(2026-11-24 예행 7회차에서 찾음)
       const later = (p: Promise<unknown>) => { const q = p.catch((e) => console.error("[tg-care] later:", e)); try { c.executionCtx.waitUntil(q); } catch { return q; } return Promise.resolve(); };
-      return c.json(await onButton(c.env, ev, later));
+      return c.json(await bg(() => onButton(c.env, ev, later), {} as any));
     }
-    case "message": await onText(c.env, ev); return c.json({});
-    case "location": await onLocation(c.env, ev); return c.json({});
+    // 글·위치는 답할 말이 없으므로 받자마자 «받음»만 하고 뒤에서 처리
+    case "message": { const w = ready(c.env.DB).then(() => onText(c.env, ev)).catch((e) => console.error("[tg-care] text:", e)); try { c.executionCtx.waitUntil(w); } catch { await w; } return c.json({}); }
+    case "location": { const w = ready(c.env.DB).then(() => onLocation(c.env, ev)).catch((e) => console.error("[tg-care] loc:", e)); try { c.executionCtx.waitUntil(w); } catch { await w; } return c.json({}); }
     default: return c.json({});
   }
 });

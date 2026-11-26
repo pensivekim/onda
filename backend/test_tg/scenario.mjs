@@ -45,8 +45,8 @@ const api = async (method, path, body, auth) => { const r = await mf.dispatchFet
 const hook = async (upd) => tongroWorker.fetch(new Request("https://tongro.test/tg/onda", { method: "POST",
   headers: { "x-telegram-bot-api-secret-token": await webhookSecret(MASTER, "onda") }, body: JSON.stringify({ update_id: ++uid, ...upd }) }), tEnv);
 const start = (url, chat, name, type = "private", from = chat) => hook({ message: { message_id: ++mid, chat: { id: chat, type, title: type === "private" ? undefined : name }, from: { id: from, first_name: name }, text: "/start " + url.split("start=")[1] } });
-const say = (chat, text) => hook({ message: { message_id: ++mid, chat: { id: chat, type: "private" }, from: { id: chat, first_name: "가상" }, text } });
-const loc = (chat, lat, lng, edited = false, message_id = 77) => hook({ [edited ? "edited_message" : "message"]: { message_id, chat: { id: chat }, from: { id: chat }, location: { latitude: lat, longitude: lng, live_period: 3600 } } });
+const say = async (chat, text) => { await hook({ message: { message_id: ++mid, chat: { id: chat, type: "private" }, from: { id: chat, first_name: "가상" }, text } }); await new Promise((r) => setTimeout(r, 150)); };  // 2026-11-26: 글·위치는 온다가 뒤에서 처리하므로 잠깐 기다림
+const loc = async (chat, lat, lng, edited = false, message_id = 77) => { await hook({ [edited ? "edited_message" : "message"]: { message_id, chat: { id: chat }, from: { id: chat }, location: { latitude: lat, longitude: lng, live_period: 3600 } } }); await new Promise((r) => setTimeout(r, 150)); };
 const to = (chat) => tgLog.filter((x) => String(x.body.chat_id) === String(chat));
 const lastText = (chat) => to(chat).filter((x) => x.body.text && x.body.text !== "✅ 연결 완료").at(-1)?.body.text || "";
 const findBtn = (chat, label) => { for (const x of [...allLog.filter((x) => String(x.body.chat_id) === String(chat))].reverse()) for (const b of (x.body.reply_markup?.inline_keyboard || []).flat()) if (b.text.includes(label)) return { b, message_id: x.method === "editMessageText" ? x.body.message_id : null, x }; return null; };

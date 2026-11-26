@@ -198,5 +198,19 @@ app.post("/api/tg/demo/clear", async (c) => {
   return c.json({ ok: true, people: people.length, removed });
 });
 
+// 연결이 끝나지 않은 시연 가족·도우미에게 같은 자리로 새 연결 링크(사람은 그대로) — 2026-11-26 대표 연결이 온다에 안 잡힌 일
+app.post("/api/tg/demo/relink", async (c) => {
+  if (!(await adminKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
+  const t = tg(c.env); if (!t) return c.json({ error: "telegram not configured" }, 503);
+  const db = c.env.DB; await tables(db);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const kind = b.kind === "helper" ? "helper" : "family";
+  const rows = (await db.prepare(`SELECT d.user_id FROM onda_tgc_demo d LEFT JOIN onda_tgc_people p ON p.room_key = 'u:' || d.user_id
+    WHERE d.kind = ? AND COALESCE(p.linked, 0) = 0`).bind(kind).all<{ user_id: string }>()).results;
+  const out = [];
+  for (const r of rows) out.push({ url: (await t.startLink(roomOf(r.user_id), 72)).url });
+  return c.json({ ok: true, kind, links: out });
+});
+
 app.onError((e, c) => c.json({ error: "demo error" }, 500));
 export { app as tgDemoRoutes };
