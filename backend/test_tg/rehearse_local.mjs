@@ -76,5 +76,15 @@ const cols = (await db.prepare("PRAGMA table_info(onda_users)").all()).results.m
 assert.ok(cols.includes("region") && cols.includes("lat"), "빠진 칸 더함");
 console.log("✔ 예전 표에 빠진 칸(region 등) 저절로 더함");
 console.log("✔ 치우기: 가상 사람·요청·출동·정산·통로 방 0, 실제 사람·실제 상황실 그대로", JSON.stringify(cl.onda.removed));
+// 시작 전 점검 입구: 열쇠 없으면 404, 있으면 개수만(이름 없음)
+{
+  const r0 = await mf.dispatchFetch("https://onda.test/api/tg/rehearse/readiness");
+  assert.equal(r0.status, 404);
+  const r1 = await mf.dispatchFetch("https://onda.test/api/tg/rehearse/readiness", { headers: { authorization: "Bearer " + env.rehToken } });
+  const t = await r1.text(); const j = JSON.parse(t);
+  assert.ok(Array.isArray(j.users) && Array.isArray(j.responders), "점검 개수 없음 " + t.slice(0, 200));
+  assert.ok(!/가상|010-|address|phone/.test(t), "점검 답에 개인정보가 섞임");
+  console.log("✔ 시작 전 점검 입구: 열쇠 없으면 404 · 개수만", t.slice(0, 160));
+}
 await mf.dispose();
 console.log("\n예행 시험 모두 통과");

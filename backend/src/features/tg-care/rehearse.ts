@@ -69,6 +69,8 @@ app.post("/api/tg/rehearse/evac", async (c) => {
     return c.json({ ok: f.ok, alertId, forecast: await f.json().catch(() => null) });
   }
   if (b.stage === "start") {
+    // 시연 도우미(실제 휴대폰)가 «대기»인 동안에는 다올 예행 대피를 걸지 않는다 — 다올 고르기는 «가상»만 보므로 (2026-11-26)
+    try { if (await c.env.DB.prepare("SELECT 1 FROM onda_tgc_demo d JOIN onda_responders r ON r.user_id = d.user_id WHERE d.kind = 'helper' AND r.available = 1 LIMIT 1").first()) return c.json({ error: "시연 중 — 다올 예행 쉼" }, 409); } catch {}
     const r = await call(`/api/evac/alerts/${encodeURIComponent(alertId)}/start`, { method: "POST", headers: { Authorization: `Bearer ${adm}`, "Content-Type": "application/json" }, body: "{}" });
     return c.json({ ok: r.ok, alertId, start: await r.json().catch(() => null) });
   }
@@ -79,6 +81,25 @@ app.post("/api/tg/rehearse/evac", async (c) => {
 const PERSON_COLS = ["user_id", "requester_id", "responder_id", "elder_id", "family_id", "enrolled_by", "asked_by", "reviewer_id", "reviewee_id", "sender_id", "target_id", "reporter_id", "helper_id"];
 const REQ_COLS = ["request_id"];
 const MATCH_COLS = ["match_id"];
+
+// 2026-11-24 시작 전 점검: 실제(«가상» 아닌) 사람·출동 개수만 — 이름·번호·주소는 내보내지 않는다
+app.get("/api/tg/rehearse/readiness", async (c) => {
+  if (!(await okKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
+  const db = c.env.DB;
+  await ensureAllTables(db); await ensureTgCareTables(db);
+  const all = async (sql: string) => { try { return (await db.prepare(sql).all()).results; } catch (e) { return [{ err: String(e).slice(0, 80) }]; } };
+  const real = "u.name NOT LIKE '가상%'";
+  return c.json({
+    users: await all(`SELECT u.role, COUNT(*) n FROM onda_users u WHERE ${real} GROUP BY u.role`),
+    responders: await all(`SELECT r.status, r.available, COUNT(*) n FROM onda_responders r JOIN onda_users u ON u.id = r.user_id WHERE ${real} GROUP BY r.status, r.available`),
+    tgPeople: await all(`SELECT p.kind, p.linked, COUNT(*) n FROM onda_tgc_people p LEFT JOIN onda_users u ON u.id = p.user_id WHERE p.room_key NOT LIKE 'ops:reh%' AND (u.id IS NULL OR ${real}) GROUP BY p.kind, p.linked`),
+    elders: await all(`SELECT COUNT(*) n FROM onda_tgc_elders e JOIN onda_users u ON u.id = e.elder_id WHERE ${real}`),
+    hiLinks: await all(`SELECT COUNT(*) n FROM onda_tgc_hi_link`),
+    family: await all(`SELECT COUNT(*) n FROM onda_tgc_family f JOIN onda_users u ON u.id = f.family_id WHERE ${real}`),
+    requests30: await all(`SELECT r.status, COUNT(*) n FROM onda_requests r JOIN onda_users u ON u.id = r.requester_id WHERE ${real} AND r.created_at > datetime('now','-30 day') GROUP BY r.status`),
+    evacPeople: await all(`SELECT COUNT(*) n FROM onda_evac_people WHERE emd_code NOT LIKE '99999%'`),
+  });
+});
 
 app.post("/api/tg/rehearse/clear", async (c) => {
   if (!(await okKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
