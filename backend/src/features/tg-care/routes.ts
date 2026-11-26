@@ -201,7 +201,17 @@ app.get("/api/tg/elders/:id/now", requireAuth(), async (c) => {
     }
   }
   const strip = ({ _helperId, ...x }: any) => x;
-  return c.json({ elder: { id: elderId, name: home.name }, now: cur ? { ...strip(cur), near } : null, past: list.filter((x) => x !== cur).slice(0, 5).map(strip) });
+  // 평소 화면에 «누가 함께 지키는지»: 연결된 보호자 수 · 같은 지역 텔레그램 연결된 승인 도우미 수 · 말벗 기기 연결 여부 (숫자만, 이름·위치 없음) — 2026-11-26
+  const one = async (sql: string, ...a: unknown[]) => { try { return (await c.env.DB.prepare(sql).bind(...a).first<{ n: number }>())?.n || 0; } catch { return 0; } };
+  const reg = await c.env.DB.prepare("SELECT COALESCE(region, 'KR') AS r, name FROM onda_users WHERE id = ?").bind(elderId).first<{ r: string; name: string }>();
+  const drill = (reg?.name || "").startsWith("가상") ? 1 : 0;
+  const circle = {
+    family: await one(`SELECT COUNT(*) AS n FROM onda_tgc_family f JOIN onda_tgc_people p ON p.user_id = f.family_id AND p.kind = 'family' AND p.linked = 1 WHERE f.elder_id = ?`, elderId),
+    helpers: await one(`SELECT COUNT(*) AS n FROM onda_responders r JOIN onda_users u ON u.id = r.user_id JOIN onda_tgc_people p ON p.user_id = r.user_id AND p.kind = 'helper' AND p.linked = 1
+      WHERE r.status = 'approved' AND COALESCE(u.region, 'KR') = ? AND (CASE WHEN u.name LIKE '가상%' THEN 1 ELSE 0 END) = ?`, reg?.r || "KR", drill),
+    malbeot: (await one("SELECT COUNT(*) AS n FROM onda_tgc_hi_link WHERE elder_id = ?", elderId)) > 0 || (await one("SELECT COUNT(*) AS n FROM onda_tgc_demo WHERE user_id = ? AND kind = 'elder'", elderId)) > 0,
+  };
+  return c.json({ elder: { id: elderId, name: home.name }, circle, now: cur ? { ...strip(cur), near } : null, past: list.filter((x) => x !== cur).slice(0, 5).map(strip) });
 });
 
 // ───────────── 말벗(hi.genomic.cc) 경보 → 온다 출동 ─────────────
