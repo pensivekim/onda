@@ -249,7 +249,18 @@ app.post("/api/tg/tongro", async (c) => {
     case "button": {
       // 오래 걸리는 알림 보내기는 답 뒤로 미룬다(2026-11-24 예행 7회차에서 찾음)
       const later = (p: Promise<unknown>) => { const q = p.catch((e) => console.error("[tg-care] later:", e)); try { c.executionCtx.waitUntil(q); } catch { return q; } return Promise.resolve(); };
-      return c.json(await bg(() => onButton(c.env, ev, later), {} as any));
+      // 6.5초 안에 못 끝나면 «처리 중»으로 먼저 답하고, 끝난 뒤 같은 메시지를 고쳐 다음 버튼을 붙인다(2026-11-26 18시 예행 «도착했어요» 버튼 빠짐)
+      let late = false;
+      const work = ready(c.env.DB).then(() => onButton(c.env, ev, later)).catch((e) => { console.error("[tg-care] button:", e); return {} as any; });
+      const fix = work.then(async (r: any) => {
+        if (!late || !r || !ev.ref) return;
+        const t = tg(c.env); if (!t) return;
+        const buttons = r.remove_buttons ? null : r.buttons;
+        const text = r.text != null ? r.text : undefined;
+        if (text != null || buttons !== undefined) await t.edit({ ref: ev.ref, ...(text != null ? { text, html: !!r.html } : {}), buttons });
+      }).catch((e) => console.error("[tg-care] button late edit:", e));
+      try { c.executionCtx.waitUntil(fix); } catch {}
+      return c.json(await Promise.race([work, new Promise<any>((ok) => setTimeout(() => { late = true; ok({ toast: "처리 중입니다 — 잠시만요" }); }, 6500))]));
     }
     // 글·위치는 답할 말이 없으므로 받자마자 «받음»만 하고 뒤에서 처리
     case "message": { const w = ready(c.env.DB).then(() => onText(c.env, ev)).catch((e) => console.error("[tg-care] text:", e)); try { c.executionCtx.waitUntil(w); } catch { await w; } return c.json({}); }
