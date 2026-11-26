@@ -63,7 +63,7 @@ function Elder({ id, token }: { id: string; token: string }) {
   const idx = STEPS.findIndex(([k]) => k === n?.match?.status);
   return (
     <section className="mb-8">
-      <h2 className="font-display text-xl font-bold mb-3">{d.elder.name} 어르신</h2>
+      <h2 className="font-display text-xl font-bold mb-3">{String(d.elder.name || '').replace(/^가상\s*/, '')} 어르신</h2>
       <div className={`rounded-card p-5 mb-3 ${cls}`}>
         <p className="text-xl font-bold leading-snug">{txt}</p>
         {n && <p className="text-sm mt-1 opacity-80">부탁한 시각 {hm(n.createdAt)}{n.match ? ` · ${n.match.helper} 도우미` : ''}</p>}
@@ -119,7 +119,7 @@ export default function TgHome() {
       <h1 className="font-display text-2xl font-bold mb-6">온다</h1>
       {me.elders.length === 0 && <p className="text-on-surface-variant">연결된 어르신이 없습니다.</p>}
       {me.elders.map((e: any) => <Elder key={e.elderId} id={e.elderId} token={token!} />)}
-      <p className="text-on-surface-variant text-base mt-2 leading-relaxed">도움이 필요하면 대화방 아래 «도와주세요» 큰 단추를 누르세요.</p>
+      <p className="text-on-surface-variant text-base mt-2 leading-relaxed">도움이 필요하면 대화방 아래 «🆘» 큰 단추를 누르세요.</p>
     </div>
   );
 }
