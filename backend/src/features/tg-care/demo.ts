@@ -85,6 +85,7 @@ app.post("/api/tg/demo/setup", async (c) => {
 });
 
 const FIRE_TEXT = "🔥 말벗이 어르신 댁에서 «불꽃»을 감지했습니다. 가까운 온다 도우미를 바로 부릅니다. (시연)";
+const FALL_TEXT = "🆘 말벗이 어르신 댁에서 «넘어짐»을 감지했습니다. 가까운 온다 도우미를 바로 부릅니다. (시연)";   // ?kind=fall (낙상 지킴 시연, 11-27)
 app.post("/api/tg/demo/alarm", async (c) => {
   const elderId = await demoElder(c.env, c.req.header("x-demo-key"));
   if (!elderId) return c.json({ error: "not found" }, 404);
@@ -96,8 +97,9 @@ app.post("/api/tg/demo/alarm", async (c) => {
   await c.env.DB.prepare("UPDATE onda_responders SET available = 1 WHERE user_id IN (SELECT user_id FROM onda_tgc_demo WHERE kind = 'helper')").run();
   // 휴대폰 화면이 바로 다음 단계로 넘어가게 답을 먼저 주고, 알림·출동은 뒤에서(가족 «불꽃» 알림 → 출동 줄 → 위급 알림 순)
   const n = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM onda_tgc_demo WHERE kind = 'helper'").first<{ n: number }>();
+  const text = c.req.query("kind") === "fall" ? FALL_TEXT : FIRE_TEXT;
   const work = (async () => {
-    await sendMany(tg(c.env), c.env.DB, await familyRooms(c.env.DB, elderId), FIRE_TEXT);
+    await sendMany(tg(c.env), c.env.DB, await familyRooms(c.env.DB, elderId), text);
     const r = await createTgRequest(c.env, elderId, "hi_system", true);
     if (!r.existing) await markEmergency(c.env, r.requestId, "hi_system");
   })().catch((e) => console.error("[demo] alarm", String(e).slice(0, 200)));

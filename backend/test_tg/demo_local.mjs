@@ -99,7 +99,7 @@ console.log("✔ CORS: hi.genomic.cc 는 시연 alarm·status·reset 만, 온다
 const before = sent.length;
 const al = await J(await call("POST", "/api/tg/demo/alarm", {}, K));
 assert.equal(al.code, 200, JSON.stringify(al.j)); assert.equal(al.j.existing, false); assert.equal(al.j.queued, 2);
-await wait(300);
+await wait(1500);
 assert.ok(textsTo(FAM).some((t) => t.includes("불꽃")), "가족 불꽃 알림 없음");
 assert.ok(textsTo(H1).some((t) => t.includes("긴급 돌봄 부탁")), "시연 도우미1 부탁 없음");
 const leak = sent.slice(before).filter((x) => ["888", "-100777", "777001"].includes(String(x.body.chat_id)));
@@ -133,10 +133,12 @@ assert.equal(rr.j.closed, 1);
 st = await J(await call("GET", "/api/tg/demo/status", undefined, K));
 assert.equal(st.j.now, null);
 assert.equal((await db.prepare("SELECT COUNT(*) n FROM onda_responders r JOIN onda_tgc_demo d ON d.user_id=r.user_id WHERE r.available=1").first()).n, 0);
-const al2 = await J(await call("POST", "/api/tg/demo/alarm", {}, K));
-assert.equal(al2.j.existing, false, "다시 하기 뒤 새 건이어야");
+const al2 = await J(await call("POST", "/api/tg/demo/alarm?kind=fall", {}, K));
+assert.equal(al2.j.existing, false, "다시 하기 뒤 새 건이어야"); await wait(1500);
+assert.ok(textsTo(FAM).slice(-3).some((t) => t.includes("넘어짐")), "가족 넘어짐 알림 없음 (?kind=fall)");
+assert.equal((await db.prepare("SELECT COUNT(*) n FROM onda_tgc_dispatch WHERE state != 'cancelled'").first()).n, 1, "다시 하기 뒤 새 출동 한 건");
 await call("POST", "/api/tg/demo/reset", {}, K);
-console.log("✔ 다시 하기: 지난 건 닫고 새 경보는 새 건");
+console.log("✔ 다시 하기: 지난 건 닫고 새 경보는 새 건 · ?kind=fall 은 가족에게 «넘어짐» 문구");
 
 // 7 예행이 시연 사람을 지우지 않고, 시연 치우기는 시연 사람만
 const cl0 = await J(await call("POST", "/api/tg/rehearse/clear", {}, { authorization: "Bearer " + REH }));
