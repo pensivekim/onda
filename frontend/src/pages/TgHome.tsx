@@ -175,7 +175,9 @@ export default function TgHome() {
       {me.elders.map((e: any) => <Elder key={e.elderId} id={e.elderId} token={token!} />)}
       <div className="bg-surface-low rounded-2xl p-5 text-base leading-relaxed">
         <p className="font-bold">급할 때</p>
-        <p className="text-on-surface-variant mt-1">대화방 아래 <b className="text-on-surface">🆘 큰 단추</b>를 누르면 가까운 도우미를 부릅니다. 숨쉬기 힘들거나 쓰러지셨다면 먼저 <a href="tel:119" className="text-error font-bold underline">119</a>에 전화하세요.</p>
+        <p className="text-on-surface-variant mt-1">이 화면을 닫고 텔레그램 «온다» 대화방 맨 아래, 글 쓰는 칸 밑의 <b className="text-on-surface">«🆘 어르신께 출동 부탁»</b> 단추를 누르면 가까운 도우미가 갑니다.</p>
+        <p className="text-on-surface-variant mt-1">단추가 안 보이면 글 쓰는 칸 오른쪽의 <b className="text-on-surface">네모 네 칸(⌨)</b> 모양을 누르세요.</p>
+        <p className="text-on-surface-variant mt-1">숨쉬기 힘들어하시거나 의식이 없으시면 먼저 <a href="tel:119" className="text-error font-bold underline">119</a>에 전화하세요.</p>
       </div>
     </div>
   );
