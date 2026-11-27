@@ -33,7 +33,7 @@ export async function rehearse({ onda, tongro, tongroAdmin, rehToken, botToken, 
   // 이 표시(mark) 뒤에 새로 온 글만 본다 — 앞 단계의 같은 글을 새 글로 잘못 보던 것(2026-11-24 실서버 예행에서 찾음)
   const mark = async () => { await pull(); return rows.length ? rows.at(-1).id : 0; };
   const hasAfter = async (m, chat, s, tries = 10) => { for (let i = 0; i < tries; i++) { if ((await to(chat)).some((x) => x.id > m && (x.b.text || "").includes(s))) return true; if (i < tries - 1) await wait(700); } return false; };
-  const press = async (chat, label, tries = 8, after = 0) => {
+  const press = async (chat, label, tries = 16, after = 0) => {   // 16×0.7초 — 서버가 6.5초 뒤 늦게 버튼을 고쳐 붙이는 때까지 기다림(2026-11-27 13:35 «마쳤어요» 못 찾음)
     for (let i = 0; i < tries; i++) {   // 버튼 글이 응답 뒤에 늦게 오는 때가 있어 조금 기다리며 다시 본다(2026-11-24 7회차)
       const hit = (await to(chat)).some((x) => x.id > after && (x.b.reply_markup?.inline_keyboard || []).flat().some((b) => b.text.includes(label)));
       if (hit) break;
