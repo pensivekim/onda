@@ -139,6 +139,20 @@ assert.ok(textsTo(FAM).slice(-3).some((t) => t.includes("넘어짐")), "가족 �
 assert.equal((await db.prepare("SELECT COUNT(*) n FROM onda_tgc_dispatch WHERE state != 'cancelled'").first()).n, 1, "다시 하기 뒤 새 출동 한 건");
 await call("POST", "/api/tg/demo/reset", {}, K);
 console.log("✔ 다시 하기: 지난 건 닫고 새 경보는 새 건 · ?kind=fall 은 가족에게 «넘어짐» 문구");
+// 6-2 낙상 그림자 기록: 열쇠 없으면 404, 엉뚱한 ev 400, 정상 기록은 남고 텔레그램 0건, 관리자만 요약을 봄
+assert.equal((await call("POST", "/api/tg/shadow", { ev: "fall" }, {})).status, 404);
+assert.equal((await call("POST", "/api/tg/shadow", { ev: "x" }, K)).status, 400);
+const sent0 = sent.length;
+const sh = await J(await call("POST", "/api/tg/shadow", { ev: "fall", judge: "cls<script>", ms: 210, fps: 4.6, dev: "Android 13; SM-A137 <b>" }, K));
+assert.equal(sh.code, 200, JSON.stringify(sh.j));
+await call("POST", "/api/tg/shadow", { ev: "beat", ms: 205, fps: 4.8, n: 17000 }, K);
+assert.equal(sent.length, sent0, "그림자 기록이 텔레그램을 보냄");
+assert.equal((await call("GET", "/api/tg/shadow/sum", undefined, {})).status, 404);
+const ss = await J(await call("GET", "/api/tg/shadow/sum", undefined, { authorization: "Bearer " + REH }));
+assert.equal(ss.j.rows.length, 2); assert.equal(ss.j.rows[1].judge, "clsscript"); assert.ok(!/[<>]/.test(ss.j.rows[1].dev), ss.j.rows[1].dev);
+const preS = await call("OPTIONS", "/api/tg/shadow", undefined, { origin: "https://hi.genomic.cc", "access-control-request-method": "POST", "access-control-request-headers": "x-demo-key,content-type" });
+assert.equal(preS.headers.get("access-control-allow-origin"), "https://hi.genomic.cc");
+console.log("✔ 낙상 그림자 기록: 열쇠 필요 · 판정 이름·기기 글자 걸러 저장 · 텔레그램 0건 · 요약은 관리자만 · hi.genomic.cc 에서 부를 수 있음");
 
 // 7 예행이 시연 사람을 지우지 않고, 시연 치우기는 시연 사람만
 const cl0 = await J(await call("POST", "/api/tg/rehearse/clear", {}, { authorization: "Bearer " + REH }));

@@ -4,6 +4,8 @@
 //  GET  /api/tg/demo/status  [시연 열쇠] 진행 상태(좌표 없이, 거리만 50m 단위)
 //  POST /api/tg/demo/reset   [시연 열쇠] 지금 시연 건 마치기(다시 해 보기)
 //  POST /api/tg/demo/clear   [TG_REH_TOKEN] 시연 사람·요청·기록 모두 지우기
+//  POST /api/tg/shadow       [시연 열쇠] 말벗 낙상 «그림자 모드»(경보 없이 기록만) — 시각·판정 이름·속도만 받음(사진·영상·위치 없음) (2026-11-28)
+//  GET  /api/tg/shadow/sum   [TG_REH_TOKEN] 그림자 기록 최근 7일
 // 실제 어르신·도우미와 섞이지 않게: 시연 사람은 이름이 «가상»(기존 예행 구분 그대로)이고 지역을 'XD' 로 둔다
 //  → 실제 어르신(KR) 일에 시연 도우미가 끼지 않고, 예행 가상 어르신(KR) 일에도 시연 도우미(실제 휴대폰)가 끼지 않는다.
 // 실제 말벗 경보 길(hi-alert)·출동 코드(dispatch.ts)는 고치지 않았다.
@@ -28,6 +30,8 @@ async function tables(db: D1Database) {
     user_id TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS onda_tgc_demo_cfg (
     id INTEGER PRIMARY KEY CHECK (id = 1), key_sha TEXT NOT NULL, elder_id TEXT NOT NULL, expires_at INTEGER NOT NULL)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS onda_tgc_shadow (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT DEFAULT (datetime('now')), ev TEXT NOT NULL, judge TEXT, ms INTEGER, fps REAL, n INTEGER, dev TEXT)`).run();
 }
 /** 시연 열쇠 확인 → 시연 어르신 id (기한 지나면 닫힘) */
 async function demoElder(env: TgEnv, key: string | undefined): Promise<string | null> {
@@ -216,3 +220,28 @@ app.post("/api/tg/demo/relink", async (c) => {
 
 app.onError((e, c) => c.json({ error: "demo error" }, 500));
 export { app as tgDemoRoutes };
+
+// ── 말벗 낙상 그림자 모드 기록 (2026-11-28, 대표 «진행해» 14:44) ──
+// 대표 시험 휴대폰(시연 열쇠가 저장된 기기)에서만 말벗 화면이 보냄. 받는 것: 무슨 일(fall=넘어짐으로 봄 · beat=한 시간 처리 요약), 판정 이름, 한 장 처리 시간, 1초 장수, 장수, 기기 이름 앞 24자.
+const SHADOW_EV = new Set(["fall", "beat", "start"]);
+app.post("/api/tg/shadow", async (c) => {
+  const elderId = await demoElder(c.env, c.req.header("x-demo-key"));
+  if (!elderId) return c.json({ error: "not found" }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const ev = String(b.ev || ""); if (!SHADOW_EV.has(ev)) return c.json({ error: "bad ev" }, 400);
+  const num = (v: unknown, hi: number) => { const x = Number(v); return Number.isFinite(x) && x >= 0 && x <= hi ? x : null; };
+  const judge = typeof b.judge === "string" ? b.judge.replace(/[^a-z_]/g, "").slice(0, 12) : null;
+  const dev = typeof b.dev === "string" ? b.dev.replace(/[^\w .;()\-\/]/g, "").slice(0, 24) : null;
+  const k = "shadow:rl:" + new Date().toISOString().slice(0, 13);   // 한 시간에 120건까지만(잘못 돌아도 쌓이지 않게)
+  const cnt = Number((await c.env.LOCATION_KV.get(k)) || 0); if (cnt >= 120) return c.json({ ok: true, dropped: true });
+  await c.env.LOCATION_KV.put(k, String(cnt + 1), { expirationTtl: 7200 });
+  await c.env.DB.prepare("INSERT INTO onda_tgc_shadow (ev, judge, ms, fps, n, dev) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(ev, judge, num(b.ms, 60000), num(b.fps, 60), num(b.n, 1e7), dev).run();
+  return c.json({ ok: true });
+});
+app.get("/api/tg/shadow/sum", async (c) => {
+  if (!(await adminKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
+  await tables(c.env.DB);
+  const rows = (await c.env.DB.prepare("SELECT at, ev, judge, ms, fps, n, dev FROM onda_tgc_shadow WHERE at >= datetime('now', '-7 days') ORDER BY id DESC LIMIT 500").all()).results;
+  return c.json({ ok: true, rows });
+});

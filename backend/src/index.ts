@@ -21,8 +21,8 @@ const app = new Hono<{ Bindings: Env }>();
 // CORS
 const ORIGINS = ["https://onda.genomic.cc", "http://localhost:5173", "http://localhost:3000"];
 app.use("*", cors({
-  // 시연 입구(/api/tg/demo/alarm·status·reset)만 말벗 시연 화면(hi.genomic.cc)에서 부를 수 있게 (2026-11-26)
-  origin: (o, c) => ORIGINS.includes(o) ? o : (o === "https://hi.genomic.cc" && /^\/api\/tg\/demo\/(alarm|status|reset)$/.test(new URL(c.req.url).pathname) ? o : null),
+  // 시연 입구(/api/tg/demo/alarm·status·reset)와 낙상 그림자 기록(/api/tg/shadow, 11-28)만 말벗(hi.genomic.cc)에서 부를 수 있게 (2026-11-26)
+  origin: (o, c) => ORIGINS.includes(o) ? o : (o === "https://hi.genomic.cc" && /^\/api\/tg\/(demo\/(alarm|status|reset)|shadow)$/.test(new URL(c.req.url).pathname) ? o : null),
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization", "X-Demo-Key"],
 }));
