@@ -224,7 +224,7 @@ export { app as tgDemoRoutes };
 
 // ── 말벗 낙상 그림자 모드 기록 (2026-11-28, 대표 «진행해» 14:44) ──
 // 대표 시험 휴대폰(시연 열쇠가 저장된 기기)에서만 말벗 화면이 보냄. 받는 것: 무슨 일(fall=넘어짐으로 봄 · beat=한 시간 처리 요약), 판정 이름, 한 장 처리 시간, 1초 장수, 장수, 기기 이름 앞 24자.
-const SHADOW_EV = new Set(["fall", "beat", "start"]);
+const SHADOW_EV = new Set(["fall", "beat", "start", "seen", "err"]);   // seen = 말벗 화면에서 그림자 모드 시작 · err = 켜다 막힌 단계(judge 자리에 단계 이름)
 app.post("/api/tg/shadow", async (c) => {
   const elderId = await demoElder(c.env, c.req.header("x-demo-key"));
   if (!elderId) return c.json({ error: "not found" }, 404);
