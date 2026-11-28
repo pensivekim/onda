@@ -6,6 +6,7 @@
 //  POST /api/tg/demo/clear   [TG_REH_TOKEN] 시연 사람·요청·기록 모두 지우기
 //  POST /api/tg/shadow       [시연 열쇠] 말벗 낙상 «그림자 모드»(경보 없이 기록만) — 시각·판정 이름·속도만 받음(사진·영상·위치 없음) (2026-11-28)
 //  GET  /api/tg/shadow/sum   [TG_REH_TOKEN] 그림자 기록 최근 7일
+//  POST /api/tg/demo/extend  [TG_REH_TOKEN] 시연 열쇠 기한 늘리기(열쇠는 그대로, 최대 30일) — 그림자 모드가 시연 열쇠로 돌기 때문 (2026-11-28)
 // 실제 어르신·도우미와 섞이지 않게: 시연 사람은 이름이 «가상»(기존 예행 구분 그대로)이고 지역을 'XD' 로 둔다
 //  → 실제 어르신(KR) 일에 시연 도우미가 끼지 않고, 예행 가상 어르신(KR) 일에도 시연 도우미(실제 휴대폰)가 끼지 않는다.
 // 실제 말벗 경보 길(hi-alert)·출동 코드(dispatch.ts)는 고치지 않았다.
@@ -244,4 +245,13 @@ app.get("/api/tg/shadow/sum", async (c) => {
   await tables(c.env.DB);
   const rows = (await c.env.DB.prepare("SELECT at, ev, judge, ms, fps, n, dev FROM onda_tgc_shadow WHERE at >= datetime('now', '-7 days') ORDER BY id DESC LIMIT 500").all()).results;
   return c.json({ ok: true, rows });
+});
+
+app.post("/api/tg/demo/extend", async (c) => {
+  if (!(await adminKey(c.env, c.req.header("authorization")))) return c.json({ error: "not found" }, 404);
+  await tables(c.env.DB);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const hours = Math.max(1, Math.min(720, Math.floor(Number(b.hours) || 0)));
+  const r = await c.env.DB.prepare("UPDATE onda_tgc_demo_cfg SET expires_at = ? WHERE id = 1").bind(Math.floor(Date.now() / 1000) + hours * 3600).run();
+  return c.json({ ok: true, updated: r.meta.changes || 0, hours });
 });
